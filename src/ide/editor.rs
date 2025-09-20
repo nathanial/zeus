@@ -15,6 +15,8 @@ const LINE_HEIGHT: f32 = 20.0;
 const H_PADDING: f32 = 5.0;
 const V_PADDING: f32 = 5.0;
 const CARET_WIDTH: i32 = 2;
+const KEY_REPEAT_INITIAL_DELAY: f32 = 0.35;
+const KEY_REPEAT_INTERVAL: f32 = 0.05;
 
 #[derive(Clone, PartialEq)]
 struct EditorSnapshot {
@@ -27,6 +29,13 @@ struct EditorSnapshot {
 enum PendingCommand {
     Open { buffer: String },
     SaveAs { buffer: String },
+}
+
+#[derive(Clone)]
+struct KeyRepeatState {
+    key: KeyboardKey,
+    timer: f32,
+    repeating: bool,
 }
 
 pub struct EditorPane {
@@ -50,6 +59,7 @@ pub struct EditorPane {
     smart_indent: bool,
     preferred_column: Option<usize>,
     pending_command: Option<PendingCommand>,
+    key_repeat_state: Option<KeyRepeatState>,
 }
 
 impl EditorPane {
@@ -75,6 +85,7 @@ impl EditorPane {
             smart_indent: true,
             preferred_column: None,
             pending_command: None,
+            key_repeat_state: None,
         };
         pane.capture_initial_state();
         pane
@@ -165,6 +176,48 @@ impl EditorPane {
     fn clear_selection(&mut self) {
         self.selection = None;
         self.selection_anchor = None;
+    }
+
+    fn reset_key_repeat_if_released(&mut self, rl: &RaylibHandle) {
+        if let Some(state) = &self.key_repeat_state {
+            if !rl.is_key_down(state.key) {
+                self.key_repeat_state = None;
+            }
+        }
+    }
+
+    fn key_triggered(&mut self, rl: &mut RaylibHandle, key: KeyboardKey) -> bool {
+        if rl.is_key_pressed(key) {
+            self.key_repeat_state = Some(KeyRepeatState {
+                key,
+                timer: 0.0,
+                repeating: false,
+            });
+            return true;
+        }
+
+        if let Some(state) = self.key_repeat_state.as_mut() {
+            if !rl.is_key_down(state.key) {
+                self.key_repeat_state = None;
+                return false;
+            }
+
+            if state.key == key && rl.is_key_down(key) {
+                state.timer += rl.get_frame_time();
+                if !state.repeating {
+                    if state.timer >= KEY_REPEAT_INITIAL_DELAY {
+                        state.timer = 0.0;
+                        state.repeating = true;
+                        return true;
+                    }
+                } else if state.timer >= KEY_REPEAT_INTERVAL {
+                    state.timer -= KEY_REPEAT_INTERVAL;
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     fn delete_selection_internal(&mut self) -> Option<String> {
@@ -786,6 +839,8 @@ impl EditorPane {
             return false;
         }
 
+        self.reset_key_repeat_if_released(rl);
+
         let mut handled = false;
         let ctrl = rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL)
             || rl.is_key_down(KeyboardKey::KEY_RIGHT_CONTROL)
@@ -802,7 +857,7 @@ impl EditorPane {
             return true;
         }
 
-        if rl.is_key_pressed(KeyboardKey::KEY_BACKSPACE) {
+        if self.key_triggered(rl, KeyboardKey::KEY_BACKSPACE) {
             if let Some(buffer) = self.pending_buffer_mut() {
                 buffer.pop();
                 handled = true;
@@ -1118,6 +1173,8 @@ impl Pane for EditorPane {
             return self.handle_pending_command_input(rl);
         }
 
+        self.reset_key_repeat_if_released(rl);
+
         let mut handled = false;
         let ctrl = rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL)
             || rl.is_key_down(KeyboardKey::KEY_RIGHT_CONTROL)
@@ -1184,7 +1241,7 @@ impl Pane for EditorPane {
             }
         }
 
-        if rl.is_key_pressed(KeyboardKey::KEY_TAB) {
+        if self.key_triggered(rl, KeyboardKey::KEY_TAB) {
             if shift {
                 self.outdent_selection_or_line();
             } else {
@@ -1198,24 +1255,24 @@ impl Pane for EditorPane {
             handled = true;
         }
 
-        if rl.is_key_pressed(KeyboardKey::KEY_BACKSPACE) {
+        if self.key_triggered(rl, KeyboardKey::KEY_BACKSPACE) {
             self.delete_backward();
             handled = true;
         }
 
-        if rl.is_key_pressed(KeyboardKey::KEY_DELETE) {
+        if self.key_triggered(rl, KeyboardKey::KEY_DELETE) {
             self.delete_forward();
             handled = true;
         }
 
         let selecting = shift;
 
-        if rl.is_key_pressed(KeyboardKey::KEY_LEFT) {
+        if self.key_triggered(rl, KeyboardKey::KEY_LEFT) {
             self.move_cursor_left(selecting);
             handled = true;
         }
 
-        if rl.is_key_pressed(KeyboardKey::KEY_RIGHT) {
+        if self.key_triggered(rl, KeyboardKey::KEY_RIGHT) {
             self.move_cursor_right(selecting);
             handled = true;
         }
@@ -1230,12 +1287,12 @@ impl Pane for EditorPane {
             handled = true;
         }
 
-        if rl.is_key_pressed(KeyboardKey::KEY_UP) {
+        if self.key_triggered(rl, KeyboardKey::KEY_UP) {
             self.move_cursor_up(selecting);
             handled = true;
         }
 
-        if rl.is_key_pressed(KeyboardKey::KEY_DOWN) {
+        if self.key_triggered(rl, KeyboardKey::KEY_DOWN) {
             self.move_cursor_down(selecting);
             handled = true;
         }
