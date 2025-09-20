@@ -9,8 +9,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Build the project
 cargo build
 
-# Run the REPL
+# Run the REPL (text mode)
 cargo run
+
+# Run the graphical UI mode
+cargo run -- -ui
 
 # Build in release mode with optimizations
 cargo build --release
@@ -63,6 +66,7 @@ Zeus is a LISP interpreter written in Rust with a modular architecture split acr
 - **evaluator_builtins.rs**: Built-in functions (arithmetic, lists, higher-order functions)
 - **evaluator_builtins_cont.rs**: Additional built-ins (nth, nthcdr, member, mapcar, etc.)
 - **repl.rs**: Read-Eval-Print Loop implementation
+- **ui.rs**: Graphical REPL interface using raylib
 
 ### Key Design Patterns
 
@@ -74,9 +78,20 @@ Zeus is a LISP interpreter written in Rust with a modular architecture split acr
 
 **Error Propagation**: All evaluation functions return `Result<Expr, String>` for consistent error handling throughout the interpreter.
 
+## UI Mode
+
+Zeus includes an optional graphical interface powered by raylib. Launch with `cargo run -- -ui`.
+
+Features:
+- Visual REPL with syntax highlighting
+- Scrollable history (mouse wheel)
+- Color-coded output (input: white, output: green, errors: red)
+- Keyboard navigation (Enter to evaluate, Backspace to delete, ESC to exit)
+- Automatic history management (maintains last 100 entries)
+
 ## Testing Strategy
 
-Tests are in `src/tests.rs` and use helper functions:
+Tests are organized in `src/tests/` modules and use helper functions:
 - `eval_to_number()`: Assert expression evaluates to a number
 - `eval_to_string()`: Assert expression evaluates to a string
 - `eval_to_list()`: Assert expression evaluates to a list
@@ -94,7 +109,7 @@ Tests cover:
 
 Zeus implements a subset of Common Lisp. Key implemented features:
 - Basic data types: numbers (f64), symbols, strings, lists
-- Special forms: `define`, `if`, `quote`, `lambda`, `let`, `let*`, `cond`, `case`, `and`, `or`, `progn`, `when`, `unless`
+- Special forms: `define`, `defun`, `if`, `quote`, `lambda`, `let`, `let*`, `cond`, `case`, `and`, `or`, `progn`, `when`, `unless`
 - List operations: `car`, `cdr`, `cons`, `list`, `append`, `reverse`, `length`, `nth`, `nthcdr`, `member`
 - Higher-order functions: `mapcar`, `filter`, `remove`, `reduce`, `apply`, `funcall`
 - I/O: `print`, `println`
@@ -106,7 +121,7 @@ See `MissingFeatures.md` for Common Lisp features not yet implemented.
 ### Adding a Built-in Function
 1. Add the function name to the match statement in `evaluator_builtins.rs::apply_builtin()`
 2. Implement the function in the same file or `evaluator_builtins_cont.rs`
-3. Add tests in `src/tests.rs`
+3. Add tests in the appropriate module under `src/tests/`
 
 ### Adding a Special Form
 1. Add the form name to the match statement in `evaluator.rs::eval()`
