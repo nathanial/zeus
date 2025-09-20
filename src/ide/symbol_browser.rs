@@ -1,3 +1,4 @@
+use crate::ide::fonts::IdeFonts;
 use crate::ide::pane::Pane;
 use crate::ide::theme::Theme;
 use crate::interpreter::environment::Environment;
@@ -180,7 +181,8 @@ impl SymbolBrowserPane {
             self.filtered_symbols = self.symbols.clone();
         } else {
             let query = self.search_query.to_lowercase();
-            self.filtered_symbols = self.symbols
+            self.filtered_symbols = self
+                .symbols
                 .iter()
                 .filter(|s| s.name.to_lowercase().contains(&query))
                 .cloned()
@@ -227,7 +229,13 @@ impl Pane for SymbolBrowserPane {
         &self.title
     }
 
-    fn draw(&mut self, d: &mut RaylibDrawHandle, bounds: Rectangle, theme: &Theme) {
+    fn draw(
+        &mut self,
+        d: &mut RaylibDrawHandle,
+        bounds: Rectangle,
+        theme: &Theme,
+        fonts: &IdeFonts,
+    ) {
         // Draw background
         d.draw_rectangle_rec(bounds, theme.surface);
 
@@ -247,11 +255,11 @@ impl Pane for SymbolBrowserPane {
             title_height as i32,
             theme.panel,
         );
-        d.draw_text(
+        fonts.draw_text(
+            d,
             &format!("{} ({})", self.title, self.filtered_symbols.len()),
-            (bounds.x + 5.0) as i32,
-            (bounds.y + 5.0) as i32,
-            16,
+            Vector2::new(bounds.x + 5.0, bounds.y + 5.0),
+            16.0,
             theme.text,
         );
 
@@ -271,16 +279,17 @@ impl Pane for SymbolBrowserPane {
         } else {
             self.search_query.clone()
         };
-        d.draw_text(
+        let search_color = if self.search_query.is_empty() {
+            theme.text_dim
+        } else {
+            theme.text
+        };
+        fonts.draw_text(
+            d,
             &search_text,
-            (bounds.x + 5.0) as i32,
-            (search_y + 5.0) as i32,
-            14,
-            if self.search_query.is_empty() {
-                theme.text_dim
-            } else {
-                theme.text
-            },
+            Vector2::new(bounds.x + 5.0, search_y + 5.0),
+            14.0,
+            search_color,
         );
 
         // Calculate content area
@@ -320,20 +329,20 @@ impl Pane for SymbolBrowserPane {
                     SymbolType::Constant => ("c", theme.keyword),
                 };
 
-                scissor.draw_text(
+                fonts.draw_text(
+                    &mut scissor,
                     icon,
-                    (bounds.x + 5.0) as i32,
-                    y as i32,
-                    14,
+                    Vector2::new(bounds.x + 5.0, y),
+                    14.0,
                     color,
                 );
 
                 // Draw symbol name
-                scissor.draw_text(
+                fonts.draw_text(
+                    &mut scissor,
                     &symbol.name,
-                    (bounds.x + 25.0) as i32,
-                    y as i32,
-                    14,
+                    Vector2::new(bounds.x + 25.0, y),
+                    14.0,
                     theme.text,
                 );
 
@@ -345,11 +354,11 @@ impl Pane for SymbolBrowserPane {
                 };
 
                 if bounds.width > 150.0 {
-                    scissor.draw_text(
+                    fonts.draw_text(
+                        &mut scissor,
                         &value_preview,
-                        (bounds.x + bounds.width - 100.0) as i32,
-                        y as i32,
-                        12,
+                        Vector2::new(bounds.x + bounds.width - 100.0, y),
+                        12.0,
                         theme.text_dim,
                     );
                 }

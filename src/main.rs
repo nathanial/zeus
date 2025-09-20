@@ -1,7 +1,8 @@
+pub mod fonts;
+pub mod ide;
 pub mod interpreter;
 pub mod tests;
 pub mod ui;
-pub mod ide;
 
 use crate::interpreter::repl::Repl;
 use std::env;

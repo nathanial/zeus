@@ -1,3 +1,4 @@
+use crate::ide::fonts::IdeFonts;
 use crate::ide::pane::Pane;
 use crate::ide::theme::Theme;
 use crate::interpreter::evaluator::Evaluator;
@@ -240,7 +241,13 @@ impl Pane for ReplPane {
         &self.title
     }
 
-    fn draw(&mut self, d: &mut RaylibDrawHandle, bounds: Rectangle, theme: &Theme) {
+    fn draw(
+        &mut self,
+        d: &mut RaylibDrawHandle,
+        bounds: Rectangle,
+        theme: &Theme,
+        fonts: &IdeFonts,
+    ) {
         // Draw background
         d.draw_rectangle_rec(bounds, theme.surface);
 
@@ -260,11 +267,11 @@ impl Pane for ReplPane {
             title_height as i32,
             theme.panel,
         );
-        d.draw_text(
+        fonts.draw_text(
+            d,
             &self.title,
-            (bounds.x + 5.0) as i32,
-            (bounds.y + 5.0) as i32,
-            16,
+            Vector2::new(bounds.x + 5.0, bounds.y + 5.0),
+            16.0,
             theme.text,
         );
 
@@ -294,11 +301,11 @@ impl Pane for ReplPane {
                     theme.success
                 };
 
-                scissor.draw_text(
+                fonts.draw_text(
+                    &mut scissor,
                     &line.text,
-                    (bounds.x + 5.0) as i32,
-                    y as i32,
-                    14,
+                    Vector2::new(bounds.x + 5.0, y),
+                    14.0,
                     color,
                 );
             }
@@ -319,19 +326,23 @@ impl Pane for ReplPane {
 
         // Draw prompt and input
         let prompt = format!("> {}", self.current_input);
-        d.draw_text(
+        fonts.draw_text(
+            d,
             &prompt,
-            (bounds.x + 5.0) as i32,
-            (input_y + 8.0) as i32,
-            14,
+            Vector2::new(bounds.x + 5.0, input_y + 8.0),
+            14.0,
             theme.text,
         );
 
         // Draw cursor
         if self.has_focus {
-            let cursor_x = bounds.x + 5.0 + 14.0 + (self.cursor_position as f32 * 8.0);
+            let cursor_pos = self.cursor_position.min(self.current_input.len());
+            let cursor_slice = &self.current_input[..cursor_pos];
+            let cursor_text = format!("> {}", cursor_slice);
+            let cursor_metrics = fonts.measure_text(&cursor_text, 14.0);
+            let cursor_x = bounds.x + 5.0 + cursor_metrics.x;
             d.draw_rectangle(
-                cursor_x as i32,
+                cursor_x.round() as i32,
                 (input_y + 8.0) as i32,
                 2,
                 16,

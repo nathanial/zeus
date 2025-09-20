@@ -1,9 +1,9 @@
+use crate::fonts::load_monospace_font;
 use crate::interpreter::evaluator::Evaluator;
 use raylib::consts::{ConfigFlags, TextureFilter};
 use raylib::core::text::RaylibFont;
 use raylib::prelude::*;
 use std::collections::VecDeque;
-use std::path::Path;
 
 const WINDOW_WIDTH: i32 = 900;
 const WINDOW_HEIGHT: i32 = 650;
@@ -35,32 +35,6 @@ struct ReplLine {
     text: String,
     is_input: bool,
     is_error: bool,
-}
-
-fn load_monospace_font(
-    rl: &mut RaylibHandle,
-    thread: &RaylibThread,
-    base_size: i32,
-) -> Option<Font> {
-    const FONT_PATH_CANDIDATES: [&str; 5] = [
-        "/System/Applications/Utilities/Terminal.app/Contents/Resources/Fonts/SF-Mono-Regular.otf",
-        "/System/Library/Fonts/SF-Mono-Regular.otf",
-        "/System/Library/Fonts/SFMono-Regular.otf",
-        "/Library/Fonts/Menlo.ttc",
-        "/System/Library/Fonts/Menlo.ttc",
-    ];
-
-    for path in FONT_PATH_CANDIDATES.iter() {
-        if Path::new(path).exists() {
-            if let Ok(font) = rl.load_font_ex(thread, path, base_size, None) {
-                font.texture()
-                    .set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_POINT);
-                return Some(font);
-            }
-        }
-    }
-
-    None
 }
 
 pub fn run_ui() {

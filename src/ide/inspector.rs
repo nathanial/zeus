@@ -1,3 +1,4 @@
+use crate::ide::fonts::IdeFonts;
 use crate::ide::pane::Pane;
 use crate::ide::theme::Theme;
 use crate::interpreter::types::Expr;
@@ -37,7 +38,17 @@ impl InspectorPane {
         self.scroll_offset = 0;
     }
 
-    fn draw_expr(&self, d: &mut RaylibDrawHandle, expr: &Expr, x: f32, y: &mut f32, indent: i32, theme: &Theme, bounds: &Rectangle) {
+    fn draw_expr(
+        &self,
+        d: &mut RaylibDrawHandle,
+        expr: &Expr,
+        x: f32,
+        y: &mut f32,
+        indent: i32,
+        theme: &Theme,
+        bounds: &Rectangle,
+        fonts: &IdeFonts,
+    ) {
         use crate::interpreter::types::{Expr, SymbolData};
 
         let indent_width = 20.0;
@@ -50,21 +61,21 @@ impl InspectorPane {
 
         match expr {
             Expr::Integer(n) => {
-                d.draw_text(
+                fonts.draw_text(
+                    d,
                     &format!("{}", n),
-                    x_pos as i32,
-                    *y as i32,
-                    14,
+                    Vector2::new(x_pos, *y),
+                    14.0,
                     theme.number,
                 );
                 *y += line_height;
             }
             Expr::Float(f) => {
-                d.draw_text(
+                fonts.draw_text(
+                    d,
                     &format!("{}", f),
-                    x_pos as i32,
-                    *y as i32,
-                    14,
+                    Vector2::new(x_pos, *y),
+                    14.0,
                     theme.number,
                 );
                 *y += line_height;
@@ -73,11 +84,11 @@ impl InspectorPane {
                 numerator,
                 denominator,
             } => {
-                d.draw_text(
+                fonts.draw_text(
+                    d,
                     &format!("{}/{}", numerator, denominator),
-                    x_pos as i32,
-                    *y as i32,
-                    14,
+                    Vector2::new(x_pos, *y),
+                    14.0,
                     theme.number,
                 );
                 *y += line_height;
@@ -90,13 +101,7 @@ impl InspectorPane {
                     '\r' => "#\\return".to_string(),
                     c => format!("#\\{}", c),
                 };
-                d.draw_text(
-                    &repr,
-                    x_pos as i32,
-                    *y as i32,
-                    14,
-                    theme.string,
-                );
+                fonts.draw_text(d, &repr, Vector2::new(x_pos, *y), 14.0, theme.string);
                 *y += line_height;
             }
             Expr::Symbol(sym_data) => {
@@ -105,13 +110,7 @@ impl InspectorPane {
                     SymbolData::Uninterned(name, id) => format!("#:{}#{}", name, id),
                     SymbolData::Interned(name) => name.clone(),
                 };
-                d.draw_text(
-                    &text,
-                    x_pos as i32,
-                    *y as i32,
-                    14,
-                    theme.keyword,
-                );
+                fonts.draw_text(d, &text, Vector2::new(x_pos, *y), 14.0, theme.keyword);
                 *y += line_height;
             }
             Expr::String(s) => {
@@ -120,13 +119,7 @@ impl InspectorPane {
                 } else {
                     format!("\"{}\"", s)
                 };
-                d.draw_text(
-                    &display,
-                    x_pos as i32,
-                    *y as i32,
-                    14,
-                    theme.string,
-                );
+                fonts.draw_text(d, &display, Vector2::new(x_pos, *y), 14.0, theme.string);
                 *y += line_height;
             }
             Expr::List(list) => {
@@ -135,29 +128,23 @@ impl InspectorPane {
 
                 // Draw expand/collapse indicator
                 let indicator = if expanded { "▼" } else { "▶" };
-                d.draw_text(
+                fonts.draw_text(
+                    d,
                     indicator,
-                    (x_pos - 15.0) as i32,
-                    *y as i32,
-                    14,
+                    Vector2::new(x_pos - 15.0, *y),
+                    14.0,
                     theme.text,
                 );
 
                 if list.is_empty() {
-                    d.draw_text(
-                        "()",
-                        x_pos as i32,
-                        *y as i32,
-                        14,
-                        theme.text,
-                    );
+                    fonts.draw_text(d, "()", Vector2::new(x_pos, *y), 14.0, theme.text);
                     *y += line_height;
                 } else {
-                    d.draw_text(
+                    fonts.draw_text(
+                        d,
                         &format!("List [{}]", list.len()),
-                        x_pos as i32,
-                        *y as i32,
-                        14,
+                        Vector2::new(x_pos, *y),
+                        14.0,
                         theme.text,
                     );
                     *y += line_height;
@@ -167,15 +154,15 @@ impl InspectorPane {
                             if *y > bounds.y + bounds.height {
                                 break;
                             }
-                            d.draw_text(
+                            fonts.draw_text(
+                                d,
                                 &format!("[{}]:", i),
-                                (x_pos + indent_width) as i32,
-                                *y as i32,
-                                12,
+                                Vector2::new(x_pos + indent_width, *y),
+                                12.0,
                                 theme.text_dim,
                             );
                             *y += line_height;
-                            self.draw_expr(d, item, x, y, indent + 2, theme, bounds);
+                            self.draw_expr(d, item, x, y, indent + 2, theme, bounds, fonts);
                         }
                     }
                 }
@@ -185,19 +172,19 @@ impl InspectorPane {
                 let expanded = self.expanded_nodes.get(&node_id).copied().unwrap_or(true);
 
                 let indicator = if expanded { "▼" } else { "▶" };
-                d.draw_text(
+                fonts.draw_text(
+                    d,
                     indicator,
-                    (x_pos - 15.0) as i32,
-                    *y as i32,
-                    14,
+                    Vector2::new(x_pos - 15.0, *y),
+                    14.0,
                     theme.text,
                 );
 
-                d.draw_text(
+                fonts.draw_text(
+                    d,
                     &format!("Vector [{}]", vec.len()),
-                    x_pos as i32,
-                    *y as i32,
-                    14,
+                    Vector2::new(x_pos, *y),
+                    14.0,
                     theme.text,
                 );
                 *y += line_height;
@@ -207,15 +194,15 @@ impl InspectorPane {
                         if *y > bounds.y + bounds.height {
                             break;
                         }
-                        d.draw_text(
+                        fonts.draw_text(
+                            d,
                             &format!("[{}]:", i),
-                            (x_pos + indent_width) as i32,
-                            *y as i32,
-                            12,
+                            Vector2::new(x_pos + indent_width, *y),
+                            12.0,
                             theme.text_dim,
                         );
                         *y += line_height;
-                        self.draw_expr(d, item, x, y, indent + 2, theme, bounds);
+                        self.draw_expr(d, item, x, y, indent + 2, theme, bounds, fonts);
                     }
                 }
             }
@@ -224,19 +211,19 @@ impl InspectorPane {
                 let expanded = self.expanded_nodes.get(&node_id).copied().unwrap_or(false);
 
                 let indicator = if expanded { "▼" } else { "▶" };
-                d.draw_text(
+                fonts.draw_text(
+                    d,
                     indicator,
-                    (x_pos - 15.0) as i32,
-                    *y as i32,
-                    14,
+                    Vector2::new(x_pos - 15.0, *y),
+                    14.0,
                     theme.text,
                 );
 
-                d.draw_text(
+                fonts.draw_text(
+                    d,
                     &format!("HashTable [{}]", h.len()),
-                    x_pos as i32,
-                    *y as i32,
-                    14,
+                    Vector2::new(x_pos, *y),
+                    14.0,
                     theme.text,
                 );
                 *y += line_height;
@@ -246,15 +233,15 @@ impl InspectorPane {
                         if *y > bounds.y + bounds.height {
                             break;
                         }
-                        d.draw_text(
+                        fonts.draw_text(
+                            d,
                             &format!("{:?}:", key),
-                            (x_pos + indent_width) as i32,
-                            *y as i32,
-                            12,
+                            Vector2::new(x_pos + indent_width, *y),
+                            12.0,
                             theme.text_dim,
                         );
                         *y += line_height;
-                        self.draw_expr(d, value, x, y, indent + 2, theme, bounds);
+                        self.draw_expr(d, value, x, y, indent + 2, theme, bounds, fonts);
                     }
                 }
             }
@@ -263,43 +250,37 @@ impl InspectorPane {
                 let expanded = self.expanded_nodes.get(&node_id).copied().unwrap_or(true);
 
                 let indicator = if expanded { "▼" } else { "▶" };
-                d.draw_text(
+                fonts.draw_text(
+                    d,
                     indicator,
-                    (x_pos - 15.0) as i32,
-                    *y as i32,
-                    14,
+                    Vector2::new(x_pos - 15.0, *y),
+                    14.0,
                     theme.text,
                 );
 
-                d.draw_text(
-                    "Cons",
-                    x_pos as i32,
-                    *y as i32,
-                    14,
-                    theme.text,
-                );
+                fonts.draw_text(d, "Cons", Vector2::new(x_pos, *y), 14.0, theme.text);
                 *y += line_height;
 
                 if expanded {
-                    d.draw_text(
+                    fonts.draw_text(
+                        d,
                         "car:",
-                        (x_pos + indent_width) as i32,
-                        *y as i32,
-                        12,
+                        Vector2::new(x_pos + indent_width, *y),
+                        12.0,
                         theme.text_dim,
                     );
                     *y += line_height;
-                    self.draw_expr(d, car, x, y, indent + 2, theme, bounds);
+                    self.draw_expr(d, car, x, y, indent + 2, theme, bounds, fonts);
 
-                    d.draw_text(
+                    fonts.draw_text(
+                        d,
                         "cdr:",
-                        (x_pos + indent_width) as i32,
-                        *y as i32,
-                        12,
+                        Vector2::new(x_pos + indent_width, *y),
+                        12.0,
                         theme.text_dim,
                     );
                     *y += line_height;
-                    self.draw_expr(d, cdr, x, y, indent + 2, theme, bounds);
+                    self.draw_expr(d, cdr, x, y, indent + 2, theme, bounds, fonts);
                 }
             }
         }
@@ -321,7 +302,13 @@ impl Pane for InspectorPane {
         &self.title
     }
 
-    fn draw(&mut self, d: &mut RaylibDrawHandle, bounds: Rectangle, theme: &Theme) {
+    fn draw(
+        &mut self,
+        d: &mut RaylibDrawHandle,
+        bounds: Rectangle,
+        theme: &Theme,
+        fonts: &IdeFonts,
+    ) {
         // Draw background
         d.draw_rectangle_rec(bounds, theme.surface);
 
@@ -341,11 +328,11 @@ impl Pane for InspectorPane {
             title_height as i32,
             theme.panel,
         );
-        d.draw_text(
+        fonts.draw_text(
+            d,
             &self.title,
-            (bounds.x + 5.0) as i32,
-            (bounds.y + 5.0) as i32,
-            16,
+            Vector2::new(bounds.x + 5.0, bounds.y + 5.0),
+            16.0,
             theme.text,
         );
 
@@ -363,20 +350,29 @@ impl Pane for InspectorPane {
 
         if let Some(ref value) = self.current_value {
             let mut y = content_y - (self.scroll_offset as f32);
-            self.draw_expr(&mut scissor, value, bounds.x + 20.0, &mut y, 0, theme, &bounds);
+            self.draw_expr(
+                &mut scissor,
+                value,
+                bounds.x + 20.0,
+                &mut y,
+                0,
+                theme,
+                &bounds,
+                fonts,
+            );
         } else {
-            scissor.draw_text(
+            fonts.draw_text(
+                &mut scissor,
                 "No value to inspect",
-                (bounds.x + 10.0) as i32,
-                content_y as i32,
-                14,
+                Vector2::new(bounds.x + 10.0, content_y),
+                14.0,
                 theme.text_dim,
             );
-            scissor.draw_text(
+            fonts.draw_text(
+                &mut scissor,
                 "Select an expression to inspect",
-                (bounds.x + 10.0) as i32,
-                (content_y + 20.0) as i32,
-                12,
+                Vector2::new(bounds.x + 10.0, content_y + 20.0),
+                12.0,
                 theme.text_dim,
             );
         }
@@ -400,8 +396,10 @@ impl Pane for InspectorPane {
         // Handle mouse clicks to expand/collapse nodes
         if rl.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
             let mouse_pos = rl.get_mouse_position();
-            if mouse_pos.x >= bounds.x && mouse_pos.x <= bounds.x + bounds.width
-                && mouse_pos.y >= bounds.y && mouse_pos.y <= bounds.y + bounds.height
+            if mouse_pos.x >= bounds.x
+                && mouse_pos.x <= bounds.x + bounds.width
+                && mouse_pos.y >= bounds.y
+                && mouse_pos.y <= bounds.y + bounds.height
             {
                 let clicked_y = (mouse_pos.y - bounds.y + self.scroll_offset as f32) as i32;
                 self.toggle_node(clicked_y);

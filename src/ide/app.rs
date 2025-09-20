@@ -1,3 +1,4 @@
+use crate::ide::fonts::IdeFonts;
 use crate::ide::ide_state::IdeState;
 use raylib::prelude::*;
 
@@ -5,11 +6,13 @@ const WINDOW_WIDTH: i32 = 1200;
 const WINDOW_HEIGHT: i32 = 800;
 const MIN_WINDOW_WIDTH: i32 = 800;
 const MIN_WINDOW_HEIGHT: i32 = 600;
+const IDE_ATLAS_BASE_SIZE: f32 = 16.0;
 
 pub struct IdeApp {
     rl: RaylibHandle,
     thread: RaylibThread,
     state: IdeState,
+    fonts: IdeFonts,
 }
 
 impl IdeApp {
@@ -19,15 +22,22 @@ impl IdeApp {
             raylib::ffi::SetConfigFlags(raylib::consts::ConfigFlags::FLAG_WINDOW_HIGHDPI as u32);
         }
 
-        let (rl, thread) = raylib::init()
+        let (mut rl, thread) = raylib::init()
             .size(WINDOW_WIDTH, WINDOW_HEIGHT)
             .title("Zeus LISP IDE - Phase 1")
             .resizable()
             .build();
 
+        let fonts = IdeFonts::load(&mut rl, &thread, IDE_ATLAS_BASE_SIZE);
+
         let state = IdeState::new();
 
-        let mut app = Self { rl, thread, state };
+        let mut app = Self {
+            rl,
+            thread,
+            state,
+            fonts,
+        };
 
         // Set minimum window size
         unsafe {
@@ -60,7 +70,8 @@ impl IdeApp {
 
     fn handle_input(&mut self) {
         // Handle global keyboard shortcuts
-        let is_ctrl_or_cmd = self.rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL) || self.rl.is_key_down(KeyboardKey::KEY_LEFT_SUPER);
+        let is_ctrl_or_cmd = self.rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL)
+            || self.rl.is_key_down(KeyboardKey::KEY_LEFT_SUPER);
 
         if is_ctrl_or_cmd {
             // Ctrl/Cmd+1: Focus editor
@@ -86,9 +97,16 @@ impl IdeApp {
         }
 
         // Handle mouse clicks to focus panes
-        if self.rl.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
+        if self
+            .rl
+            .is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT)
+        {
             let mouse_pos = self.rl.get_mouse_position();
-            if let Some(pane_id) = self.state.layout_manager.handle_click(mouse_pos.x, mouse_pos.y) {
+            if let Some(pane_id) = self
+                .state
+                .layout_manager
+                .handle_click(mouse_pos.x, mouse_pos.y)
+            {
                 self.state.focus_pane(pane_id);
             }
         }
@@ -106,9 +124,12 @@ impl IdeApp {
 
         // Let the focused pane handle input
         // We need to clone the focused_id to avoid borrowing issues
-        let focused_info = self.state.layout_manager.get_focused_pane()
-            .and_then(|id| self.state.layout_manager.get_pane_bounds(id)
-                .map(|bounds| (id.clone(), bounds.clone())));
+        let focused_info = self.state.layout_manager.get_focused_pane().and_then(|id| {
+            self.state
+                .layout_manager
+                .get_pane_bounds(id)
+                .map(|bounds| (id.clone(), bounds.clone()))
+        });
 
         if let Some((focused_id, bounds)) = focused_info {
             if let Some(pane) = self.state.panes.get_mut(&focused_id) {
@@ -139,7 +160,12 @@ impl IdeApp {
         // Draw all visible panes
         for (pane_id, bounds) in self.state.layout_manager.get_all_pane_bounds() {
             if let Some(pane) = self.state.panes.get_mut(pane_id) {
-                pane.draw(&mut d, bounds.to_rectangle(), &self.state.theme);
+                pane.draw(
+                    &mut d,
+                    bounds.to_rectangle(),
+                    &self.state.theme,
+                    &self.fonts,
+                );
             }
         }
 
@@ -165,21 +191,21 @@ impl IdeApp {
             "Zeus LISP IDE - Phase 1".to_string()
         };
 
-        d.draw_text(
+        self.fonts.draw_text(
+            &mut d,
             &status_text,
-            10,
-            (status_y + 5.0) as i32,
-            14,
+            Vector2::new(10.0, status_y + 5.0),
+            14.0,
             self.state.theme.text,
         );
 
         // Draw FPS in top-right corner (for debugging)
         let fps_text = format!("FPS: {}", d.get_fps());
-        d.draw_text(
+        self.fonts.draw_text(
+            &mut d,
             &fps_text,
-            (screen_width - 80.0) as i32,
-            5,
-            12,
+            Vector2::new(screen_width - 80.0, 5.0),
+            12.0,
             self.state.theme.text_dim,
         );
     }

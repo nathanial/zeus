@@ -1,3 +1,4 @@
+use crate::ide::fonts::IdeFonts;
 use crate::ide::pane::Pane;
 use crate::ide::theme::Theme;
 use crate::interpreter::evaluator::Evaluator;
@@ -298,7 +299,13 @@ impl Pane for EditorPane {
         &self.title
     }
 
-    fn draw(&mut self, d: &mut RaylibDrawHandle, bounds: Rectangle, theme: &Theme) {
+    fn draw(
+        &mut self,
+        d: &mut RaylibDrawHandle,
+        bounds: Rectangle,
+        theme: &Theme,
+        fonts: &IdeFonts,
+    ) {
         // Draw background
         d.draw_rectangle_rec(bounds, theme.surface);
 
@@ -318,26 +325,27 @@ impl Pane for EditorPane {
             title_height as i32,
             theme.panel,
         );
-        d.draw_text(
+        fonts.draw_text(
+            d,
             &self.title,
-            (bounds.x + 5.0) as i32,
-            (bounds.y + 5.0) as i32,
-            16,
+            Vector2::new(bounds.x + 5.0, bounds.y + 5.0),
+            16.0,
             theme.text,
         );
 
         // Draw content
         let content_y = bounds.y + title_height + 5.0;
+        let content_font_size = 14.0;
         let line_height = 20.0;
         let mut y = content_y;
 
         for line in self.content.lines() {
             if y < bounds.y + bounds.height - 30.0 {
-                d.draw_text(
+                fonts.draw_text(
+                    d,
                     line,
-                    (bounds.x + 5.0) as i32,
-                    y as i32,
-                    14,
+                    Vector2::new(bounds.x + 5.0, y),
+                    content_font_size,
                     theme.text,
                 );
                 y += line_height;
@@ -346,13 +354,29 @@ impl Pane for EditorPane {
 
         // Draw cursor
         if self.has_focus {
-            let cursor_x = bounds.x + 5.0 + (self.cursor_position as f32 * 8.0);
-            let cursor_y = content_y;
+            let cursor_pos = self.cursor_position.min(self.content.len());
+            let mut line_start = 0usize;
+            let mut line_index = 0usize;
+
+            for (idx, ch) in self.content.char_indices() {
+                if idx >= cursor_pos {
+                    break;
+                }
+                if ch == '\n' {
+                    line_index += 1;
+                    line_start = idx + ch.len_utf8();
+                }
+            }
+
+            let line_slice = &self.content[line_start..cursor_pos];
+            let cursor_metrics = fonts.measure_text(line_slice, content_font_size);
+            let cursor_x = bounds.x + 5.0 + cursor_metrics.x;
+            let cursor_y = content_y + line_index as f32 * line_height;
             d.draw_rectangle(
                 cursor_x as i32,
                 cursor_y as i32,
                 2,
-                16,
+                content_font_size.round() as i32,
                 theme.cursor,
             );
         }
@@ -368,16 +392,17 @@ impl Pane for EditorPane {
                 25,
                 theme.panel,
             );
-            d.draw_text(
+            let result_color = if result.starts_with("Error") {
+                theme.error
+            } else {
+                theme.success
+            };
+            fonts.draw_text(
+                d,
                 result,
-                (bounds.x + 5.0) as i32,
-                (result_y + 5.0) as i32,
-                12,
-                if result.starts_with("Error") {
-                    theme.error
-                } else {
-                    theme.success
-                },
+                Vector2::new(bounds.x + 5.0, result_y + 5.0),
+                12.0,
+                result_color,
             );
         }
     }
@@ -390,16 +415,22 @@ impl Pane for EditorPane {
         let mut handled = false;
 
         // Handle keyboard shortcuts
-        if rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL) || rl.is_key_down(KeyboardKey::KEY_LEFT_SUPER) {
+        if rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL)
+            || rl.is_key_down(KeyboardKey::KEY_LEFT_SUPER)
+        {
             if rl.is_key_pressed(KeyboardKey::KEY_E) {
                 // Evaluate expression
                 self.evaluate_expression();
                 handled = true;
-            } else if rl.is_key_pressed(KeyboardKey::KEY_RIGHT) && rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT) {
+            } else if rl.is_key_pressed(KeyboardKey::KEY_RIGHT)
+                && rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
+            {
                 // Paredit slurp forward
                 self.paredit_slurp_forward();
                 handled = true;
-            } else if rl.is_key_pressed(KeyboardKey::KEY_LEFT) && rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT) {
+            } else if rl.is_key_pressed(KeyboardKey::KEY_LEFT)
+                && rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
+            {
                 // Paredit barf forward
                 self.paredit_barf_forward();
                 handled = true;
