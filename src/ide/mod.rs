@@ -8,6 +8,7 @@ pub mod layout;
 pub mod pane;
 pub mod repl_pane;
 pub mod symbol_browser;
+pub mod syntax;
 pub mod theme;
 
 pub use app::IdeApp;

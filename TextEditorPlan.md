@@ -13,7 +13,7 @@
 - [ ] Line numbers and column ruler for orientation.
 
 ## Code Awareness
-- [ ] Syntax highlighting driven by the Lisp tokenizer/theme palette.
+- [x] Syntax highlighting driven by the Lisp tokenizer/theme palette.
 - [ ] Structural editing helpers (balanced parentheses, sexp navigation, auto-format).
 - [ ] Inline evaluation feedback (show result inline, error annotations, inspector hook).
 

@@ -1,5 +1,6 @@
 use crate::ide::fonts::IdeFonts;
 use crate::ide::pane::Pane;
+use crate::ide::syntax::{SyntaxHighlighter, SyntaxKind};
 use crate::ide::theme::Theme;
 use crate::interpreter::evaluator::Evaluator;
 use raylib::prelude::*;
@@ -56,6 +57,11 @@ struct ScrollDragState {
     thumb_size: f32,
 }
 
+#[derive(Clone, Copy)]
+struct MouseSelectionState {
+    anchor: usize,
+}
+
 #[derive(Clone, PartialEq)]
 struct EditorSnapshot {
     content: String,
@@ -103,6 +109,8 @@ pub struct EditorPane {
     auto_scroll_to_cursor: bool,
     last_layout: Option<EditorViewLayout>,
     scroll_drag_state: Option<ScrollDragState>,
+    syntax_highlighter: SyntaxHighlighter,
+    mouse_selection_state: Option<MouseSelectionState>,
 }
 
 impl EditorPane {
@@ -134,8 +142,11 @@ impl EditorPane {
             auto_scroll_to_cursor: true,
             last_layout: None,
             scroll_drag_state: None,
+            syntax_highlighter: SyntaxHighlighter::new(),
+            mouse_selection_state: None,
         };
         pane.capture_initial_state();
+        pane.syntax_highlighter.reset(&pane.content);
         pane
     }
 
@@ -170,6 +181,7 @@ impl EditorPane {
         });
         self.selection_anchor = self.selection.map(|(start, _)| start);
         self.preferred_column = None;
+        self.mouse_selection_state = None;
         self.mark_dirty();
         self.request_scroll_to_cursor();
     }
@@ -196,6 +208,7 @@ impl EditorPane {
             Some(saved) => *saved != self.content,
             None => !self.content.is_empty(),
         };
+        self.syntax_highlighter.invalidate();
         self.update_title();
     }
 
@@ -362,6 +375,60 @@ impl EditorPane {
             col += 1;
         }
         idx
+    }
+
+    fn position_from_point(&self, layout: &EditorViewLayout, point: Vector2) -> usize {
+        let char_width = layout.char_width.max(1.0);
+        let mut local_x = point.x - layout.text_rect.x;
+        let mut local_y = point.y - layout.text_rect.y;
+
+        if !local_x.is_finite() || !local_y.is_finite() {
+            return self.cursor_position;
+        }
+
+        if local_x < 0.0 {
+            local_x = 0.0;
+        }
+        if local_y < 0.0 {
+            local_y = 0.0;
+        }
+
+        let local_x = local_x + self.scroll_x;
+        let local_y = local_y + self.scroll_y;
+
+        let mut line_index = (local_y / LINE_HEIGHT).floor() as isize;
+        if line_index < 0 {
+            line_index = 0;
+        }
+
+        let lines: Vec<&str> = self.content.split('\n').collect();
+        if lines.is_empty() {
+            return 0;
+        }
+
+        let max_line_index = lines.len() as isize - 1;
+        if line_index > max_line_index {
+            line_index = max_line_index;
+        }
+
+        let line_index = line_index as usize;
+        let mut line_start = 0usize;
+        for line in lines.iter().take(line_index) {
+            line_start += line.len() + 1;
+        }
+        let line_text = lines[line_index];
+        let line_char_count = line_text.chars().count();
+
+        let mut column = (local_x / char_width).round() as isize;
+        if column < 0 {
+            column = 0;
+        }
+        if column as usize > line_char_count {
+            column = line_char_count as isize;
+        }
+        let column = column as usize;
+
+        self.index_for_column(line_start, column)
     }
 
     fn move_cursor_to(&mut self, position: usize, selecting: bool) {
@@ -972,6 +1039,7 @@ impl EditorPane {
                 self.saved_content = Some(self.content.clone());
                 self.is_dirty = false;
                 self.capture_initial_state();
+                self.syntax_highlighter.reset(&self.content);
                 self.update_title();
                 self.show_status_message(format!("Opened {}", path.display()));
             }
@@ -1115,6 +1183,104 @@ impl EditorPane {
             height: LINE_HEIGHT,
         };
         target.draw_rectangle_rec(rect, theme.selection);
+    }
+
+    fn draw_highlighted_line<T: RaylibDraw>(
+        &self,
+        target: &mut T,
+        fonts: &IdeFonts,
+        theme: &Theme,
+        line_text: &str,
+        line_index: usize,
+        line_y: f32,
+        text_origin_x: f32,
+    ) {
+        let mut cursor_x = text_origin_x - self.scroll_x;
+
+        if let Some(highlight) = self.syntax_highlighter.line(line_index) {
+            if highlight.spans.is_empty() {
+                if !line_text.is_empty() {
+                    fonts.draw_text(
+                        target,
+                        line_text,
+                        Vector2::new(cursor_x, line_y),
+                        CONTENT_FONT_SIZE,
+                        theme.text,
+                    );
+                }
+                return;
+            }
+
+            let mut handled_up_to = 0usize;
+            for span in &highlight.spans {
+                if span.start >= span.end || span.end > line_text.len() {
+                    continue;
+                }
+
+                if span.start > handled_up_to {
+                    let gap = &line_text[handled_up_to..span.start];
+                    if !gap.is_empty() {
+                        fonts.draw_text(
+                            target,
+                            gap,
+                            Vector2::new(cursor_x, line_y),
+                            CONTENT_FONT_SIZE,
+                            theme.text,
+                        );
+                        cursor_x += fonts.measure_text(gap, CONTENT_FONT_SIZE).x;
+                    }
+                }
+
+                let segment = &line_text[span.start..span.end];
+                if segment.is_empty() {
+                    continue;
+                }
+                let color = self.color_for_kind(span.kind, theme);
+                fonts.draw_text(
+                    target,
+                    segment,
+                    Vector2::new(cursor_x, line_y),
+                    CONTENT_FONT_SIZE,
+                    color,
+                );
+                cursor_x += fonts.measure_text(segment, CONTENT_FONT_SIZE).x;
+                handled_up_to = span.end;
+            }
+
+            if handled_up_to < line_text.len() {
+                let remainder = &line_text[handled_up_to..];
+                if !remainder.is_empty() {
+                    fonts.draw_text(
+                        target,
+                        remainder,
+                        Vector2::new(cursor_x, line_y),
+                        CONTENT_FONT_SIZE,
+                        theme.text,
+                    );
+                }
+            }
+        } else if !line_text.is_empty() {
+            fonts.draw_text(
+                target,
+                line_text,
+                Vector2::new(cursor_x, line_y),
+                CONTENT_FONT_SIZE,
+                theme.text,
+            );
+        }
+    }
+
+    fn color_for_kind(&self, kind: SyntaxKind, theme: &Theme) -> Color {
+        match kind {
+            SyntaxKind::Normal => theme.text,
+            SyntaxKind::Comment => theme.comment,
+            SyntaxKind::String => theme.string,
+            SyntaxKind::Number => theme.number,
+            SyntaxKind::Keyword => theme.keyword,
+            SyntaxKind::SpecialForm => theme.special_form,
+            SyntaxKind::Function => theme.function,
+            SyntaxKind::Constant => theme.keyword,
+        }
     }
 
     fn compute_layout(
@@ -1440,6 +1606,8 @@ impl Pane for EditorPane {
         }
         let total_content_height = line_count as f32 * LINE_HEIGHT;
 
+        self.syntax_highlighter.ensure(&self.content);
+
         let mut layout =
             self.compute_layout(bounds, total_content_height, max_line_width, char_width);
 
@@ -1472,7 +1640,12 @@ impl Pane for EditorPane {
             let text_origin_x = layout.text_rect.x;
             let visible_bottom = layout.text_rect.y + layout.text_rect.height;
 
-            for line in self.content.split('\n').skip(first_visible_line) {
+            for (line_index, line) in self
+                .content
+                .split('\n')
+                .enumerate()
+                .skip(first_visible_line)
+            {
                 if line_y > visible_bottom {
                     break;
                 }
@@ -1489,12 +1662,14 @@ impl Pane for EditorPane {
                         self.scroll_x,
                     );
                 }
-                fonts.draw_text(
+                self.draw_highlighted_line(
                     &mut scissor,
+                    fonts,
+                    theme,
                     line,
-                    Vector2::new(text_origin_x - self.scroll_x, line_y),
-                    CONTENT_FONT_SIZE,
-                    theme.text,
+                    line_index,
+                    line_y,
+                    text_origin_x,
                 );
 
                 line_y += LINE_HEIGHT;
@@ -1588,6 +1763,8 @@ impl Pane for EditorPane {
         let mouse_pos = rl.get_mouse_position();
 
         if let Some(layout) = layout_snapshot {
+            let shift_down = rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
+                || rl.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT);
             let wheel_move = rl.get_mouse_wheel_move();
             let mut scrolled = false;
             if wheel_move.abs() > f32::EPSILON {
@@ -1602,9 +1779,7 @@ impl Pane for EditorPane {
                     .unwrap_or(false);
                 if over_text || over_vertical || over_horizontal || rect_contains(bounds, mouse_pos)
                 {
-                    let shift_mod = rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
-                        || rl.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT);
-                    if shift_mod && layout.max_scroll_x > 0.0 {
+                    if shift_down && layout.max_scroll_x > 0.0 {
                         let prev = self.scroll_x;
                         let delta = -wheel_move * layout.char_width * SCROLL_WHEEL_LINES;
                         self.scroll_x = (self.scroll_x + delta).clamp(0.0, layout.max_scroll_x);
@@ -1619,6 +1794,7 @@ impl Pane for EditorPane {
             }
 
             if rl.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
+                self.mouse_selection_state = None;
                 if let Some(vbar) = layout.vertical {
                     if rect_contains(vbar.track, mouse_pos) {
                         if rect_contains(vbar.thumb, mouse_pos) {
@@ -1676,6 +1852,26 @@ impl Pane for EditorPane {
                         }
                     }
                 }
+
+                if !handled && rect_contains(layout.text_rect, mouse_pos) {
+                    let index = self.position_from_point(&layout, mouse_pos);
+                    let anchor = if shift_down {
+                        self.selection_anchor.unwrap_or(self.cursor_position)
+                    } else {
+                        index
+                    };
+
+                    if shift_down {
+                        self.selection_anchor = Some(anchor);
+                        self.move_cursor_to(index, true);
+                    } else {
+                        self.move_cursor_to(index, false);
+                        self.selection_anchor = Some(anchor);
+                    }
+
+                    self.mouse_selection_state = Some(MouseSelectionState { anchor });
+                    handled = true;
+                }
             }
 
             if rl.is_mouse_button_down(MouseButton::MOUSE_BUTTON_LEFT) {
@@ -1717,10 +1913,18 @@ impl Pane for EditorPane {
                         }
                     }
                 }
+
+                if let Some(selection_state) = self.mouse_selection_state {
+                    let index = self.position_from_point(&layout, mouse_pos);
+                    self.selection_anchor = Some(selection_state.anchor);
+                    self.move_cursor_to(index, true);
+                    handled = true;
+                }
             }
 
             if rl.is_mouse_button_released(MouseButton::MOUSE_BUTTON_LEFT) {
                 self.scroll_drag_state = None;
+                self.mouse_selection_state = None;
             }
 
             if scrolled {
@@ -1866,6 +2070,8 @@ impl Pane for EditorPane {
 
     fn on_blur(&mut self) {
         self.has_focus = false;
+        self.mouse_selection_state = None;
+        self.scroll_drag_state = None;
     }
 
     fn as_any(&self) -> &dyn Any {
