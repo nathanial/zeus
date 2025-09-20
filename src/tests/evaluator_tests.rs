@@ -1,11 +1,11 @@
 use super::helpers::*;
-use crate::interpreter::*;
 use crate::interpreter::types::SymbolData;
+use crate::interpreter::*;
 
 #[test]
 fn test_eval_number() {
     let result = Evaluator::eval_once("42");
-    assert_eq!(result.unwrap(), Expr::Number(42.0));
+    assert_eq!(result.unwrap(), Expr::Integer(42));
 }
 
 #[test]
@@ -19,7 +19,7 @@ fn test_eval_define_and_use() {
     let mut evaluator = Evaluator::new();
     evaluator.eval_str("(define x 10)").unwrap();
     let result = evaluator.eval_str("x").unwrap();
-    assert_eq!(result, Expr::Number(10.0));
+    assert_eq!(result, Expr::Integer(10));
 }
 
 #[test]
@@ -39,8 +39,8 @@ fn test_eval_quote() {
         result,
         Expr::List(vec![
             Expr::Symbol(SymbolData::Interned("+".to_string())),
-            Expr::Number(1.0),
-            Expr::Number(2.0),
+            Expr::Integer(1),
+            Expr::Integer(2),
         ])
     );
 
@@ -82,5 +82,5 @@ fn test_complex_expression() {
     evaluator.eval_str("(define x 5)").unwrap();
     evaluator.eval_str("(define y 10)").unwrap();
     let result = evaluator.eval_str("(+ (* x 2) y)").unwrap();
-    assert_eq!(result, Expr::Number(20.0));
+    assert_eq!(result, Expr::Integer(20));
 }

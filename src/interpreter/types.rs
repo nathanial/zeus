@@ -1,18 +1,25 @@
+use std::collections::HashMap;
+use std::rc::Rc;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     LeftParen,
     RightParen,
+    LeftBracket, // For vector literals
+    RightBracket,
     Symbol(String),
-    Keyword(String),  // Self-evaluating keyword symbols (e.g., :keyword)
-    Number(f64),
+    Keyword(String), // Self-evaluating keyword symbols (e.g., :keyword)
+    Integer(i64),
+    Float(f64),
     String(String),
+    Character(char),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SymbolData {
-    Interned(String),      // Normal symbols that are interned
+    Interned(String),        // Normal symbols that are interned
     Uninterned(String, u64), // Uninterned symbols from gensym with unique ID
-    Keyword(String),       // Self-evaluating keyword symbols
+    Keyword(String),         // Self-evaluating keyword symbols
 }
 
 impl SymbolData {
@@ -33,12 +40,61 @@ impl SymbolData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Expr {
-    Number(f64),
+    Integer(i64),
+    Float(f64),
+    Rational { numerator: i64, denominator: i64 },
     Symbol(SymbolData),
     String(String),
+    Character(char),
+    Cons(Box<Expr>, Box<Expr>),
     List(Vec<Expr>),
+    Vector(Vec<Expr>),
+    HashTable(Rc<HashMap<HashKey, Expr>>),
+}
+
+// Custom PartialEq implementation for Expr to handle HashTable comparison
+impl PartialEq for Expr {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Expr::Integer(a), Expr::Integer(b)) => a == b,
+            (Expr::Float(a), Expr::Float(b)) => a == b,
+            (
+                Expr::Rational {
+                    numerator: n1,
+                    denominator: d1,
+                },
+                Expr::Rational {
+                    numerator: n2,
+                    denominator: d2,
+                },
+            ) => n1 == n2 && d1 == d2,
+            (Expr::Symbol(a), Expr::Symbol(b)) => a == b,
+            (Expr::String(a), Expr::String(b)) => a == b,
+            (Expr::Character(a), Expr::Character(b)) => a == b,
+            (Expr::List(a), Expr::List(b)) => a == b,
+            (Expr::Cons(a_car, a_cdr), Expr::Cons(b_car, b_cdr)) => {
+                a_car == b_car && a_cdr == b_cdr
+            }
+            (Expr::Vector(a), Expr::Vector(b)) => a == b,
+            (Expr::HashTable(a), Expr::HashTable(b)) => {
+                // HashTables are equal if they have the same keys and values
+                a.len() == b.len() && a.iter().all(|(k, v)| b.get(k).map_or(false, |v2| v == v2))
+            }
+            _ => false,
+        }
+    }
+}
+
+// A hashable key type for hash tables
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum HashKey {
+    Integer(i64),
+    Symbol(String),
+    String(String),
+    Character(char),
+    Keyword(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]

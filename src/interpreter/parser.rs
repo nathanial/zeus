@@ -29,7 +29,9 @@ impl Parser {
 
     fn parse_expr(&mut self) -> Result<Expr, String> {
         match self.advance() {
-            Some(Token::Number(n)) => Ok(Expr::Number(n)),
+            Some(Token::Integer(n)) => Ok(Expr::Integer(n)),
+            Some(Token::Float(n)) => Ok(Expr::Float(n)),
+            Some(Token::Character(ch)) => Ok(Expr::Character(ch)),
             Some(Token::Symbol(s)) => Ok(Expr::Symbol(SymbolData::Interned(s))),
             Some(Token::Keyword(s)) => Ok(Expr::Symbol(SymbolData::Keyword(s))),
             Some(Token::String(s)) => Ok(Expr::String(s)),
@@ -49,7 +51,24 @@ impl Parser {
                     }
                 }
             }
+            Some(Token::LeftBracket) => {
+                let mut vector = Vec::new();
+
+                loop {
+                    match self.peek() {
+                        Some(Token::RightBracket) => {
+                            self.advance();
+                            return Ok(Expr::Vector(vector));
+                        }
+                        None => return Err("Unexpected end of input in vector".to_string()),
+                        _ => {
+                            vector.push(self.parse_expr()?);
+                        }
+                    }
+                }
+            }
             Some(Token::RightParen) => Err("Unexpected )".to_string()),
+            Some(Token::RightBracket) => Err("Unexpected ]".to_string()),
             None => Err("Unexpected end of input".to_string()),
         }
     }

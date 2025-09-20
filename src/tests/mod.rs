@@ -3,6 +3,8 @@ pub mod arithmetic_tests;
 #[cfg(test)]
 pub mod builtin_functions_tests;
 #[cfg(test)]
+pub mod data_types_tests;
+#[cfg(test)]
 pub mod defun_tests;
 #[cfg(test)]
 pub mod evaluator_tests;

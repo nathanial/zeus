@@ -20,18 +20,19 @@ This document outlines the features that Zeus currently lacks compared to a full
 - [x] `tagbody` / `go` - Low-level control flow ✅
 
 ### Data Types
-- [ ] **Symbols**
-  - [ ] Symbol properties (plist)
-  - [ ] Uninterned symbols (gensym)
-  - [ ] Keywords (self-evaluating symbols)
-- [ ] **Numbers**
-  - [ ] Integers (arbitrary precision)
-  - [ ] Rationals
+- [x] **Symbols** ✅
+  - [x] Symbol properties (plist) ✅
+  - [x] Uninterned symbols (gensym) ✅
+  - [x] Keywords (self-evaluating symbols) ✅
+- [x] **Numbers** ✅ (Partially)
+  - [x] Integers (i64) ✅
+  - [x] Floats (f64) ✅
+  - [x] Rationals (basic support) ✅
   - [ ] Complex numbers
-  - [ ] Type-specific operations
-- [ ] **Characters** - Distinct from strings
-- [ ] **Arrays** - Multi-dimensional arrays
-- [ ] **Hash Tables** - Key-value maps
+  - [x] Type-specific operations ✅
+- [x] **Characters** - Distinct from strings ✅
+- [x] **Vectors** - One-dimensional arrays ✅
+- [x] **Hash Tables** - Key-value maps ✅
 - [ ] **Structures** - User-defined types
 - [ ] **Classes** (CLOS) - Object-oriented programming
 - [ ] **Packages** - Namespace management
@@ -76,7 +77,15 @@ This document outlines the features that Zeus currently lacks compared to a full
 
 ### Type System
 - [ ] `deftype` - Type definitions
-- [ ] `typep` - Type checking
+- [x] Type predicates ✅
+  - [x] `integerp` - Check if integer ✅
+  - [x] `floatp` - Check if float ✅
+  - [x] `rationalp` - Check if rational ✅
+  - [x] `numberp` - Check if number ✅
+  - [x] `characterp` - Check if character ✅
+  - [x] `vectorp` - Check if vector ✅
+  - [x] `hash-table-p` - Check if hash table ✅
+- [ ] `typep` - General type checking
 - [ ] `coerce` - Type conversion
 - [ ] `check-type` - Type assertions
 - [ ] `declare` - Type declarations

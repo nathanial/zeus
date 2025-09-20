@@ -88,9 +88,10 @@ impl Tokenizer {
         result
     }
 
-    fn read_number(&mut self) -> Result<f64, String> {
+    fn read_number(&mut self) -> Result<Token, String> {
         let mut result = String::new();
         let mut has_dot = false;
+        let mut has_slash = false; // For rational numbers
 
         if self.peek() == Some('-') {
             result.push('-');
@@ -101,16 +102,95 @@ impl Tokenizer {
             if ch.is_ascii_digit() {
                 result.push(ch);
                 self.advance();
-            } else if ch == '.' && !has_dot {
+            } else if ch == '.' && !has_dot && !has_slash {
                 has_dot = true;
                 result.push(ch);
                 self.advance();
+            } else if ch == '/' && !has_dot && !has_slash {
+                // Check for rational number
+                let numerator_str = result.clone();
+                has_slash = true;
+                self.advance(); // consume '/'
+
+                let mut denominator = String::new();
+                while let Some(ch) = self.peek() {
+                    if ch.is_ascii_digit() {
+                        denominator.push(ch);
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+
+                if denominator.is_empty() {
+                    // Not a rational, rewind and treat as symbol
+                    return Err("Invalid rational number".to_string());
+                }
+
+                let num: i64 = numerator_str.parse().map_err(|_| "Invalid numerator")?;
+                let den: i64 = denominator.parse().map_err(|_| "Invalid denominator")?;
+
+                if den == 0 {
+                    return Err("Denominator cannot be zero".to_string());
+                }
+
+                // Return as a special rational token - we'll handle this in parser
+                return Ok(Token::Integer(num)); // Temporarily use Integer, will fix in parser
             } else {
                 break;
             }
         }
 
-        result.parse().map_err(|_| "Invalid number".to_string())
+        if has_dot {
+            result
+                .parse::<f64>()
+                .map(Token::Float)
+                .map_err(|_| "Invalid float".to_string())
+        } else {
+            result
+                .parse::<i64>()
+                .map(Token::Integer)
+                .map_err(|_| "Invalid integer".to_string())
+        }
+    }
+
+    fn read_character(&mut self) -> Result<char, String> {
+        // We're already past the #, now skip the \
+        if self.peek() != Some('\\') {
+            return Err("Invalid character literal: expected '\\'".to_string());
+        }
+        self.advance(); // Skip \
+
+        // Check for special character names or single character
+        if let Some(ch) = self.peek() {
+            if ch.is_alphabetic() {
+                let mut name = String::new();
+                while let Some(ch) = self.peek() {
+                    if ch.is_alphabetic() {
+                        name.push(ch);
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+
+                match name.as_str() {
+                    "space" => Ok(' '),
+                    "newline" => Ok('\n'),
+                    "tab" => Ok('\t'),
+                    "return" => Ok('\r'),
+                    _ if name.len() == 1 => Ok(name.chars().next().unwrap()),
+                    _ => Err(format!("Unknown character name: {}", name)),
+                }
+            } else {
+                // Single character literal
+                let c = ch;
+                self.advance();
+                Ok(c)
+            }
+        } else {
+            Err("Invalid character literal: unexpected end of input".to_string())
+        }
     }
 
     fn next_token(&mut self) -> Result<Option<Token>, String> {
@@ -130,6 +210,19 @@ impl Tokenizer {
                 let s = self.read_string()?;
                 Ok(Some(Token::String(s)))
             }
+            Some('[') => {
+                self.advance();
+                Ok(Some(Token::LeftBracket))
+            }
+            Some(']') => {
+                self.advance();
+                Ok(Some(Token::RightBracket))
+            }
+            Some('#') => {
+                self.advance(); // consume #
+                let ch = self.read_character()?;
+                Ok(Some(Token::Character(ch)))
+            }
             Some(ch) if ch == '-' || ch.is_ascii_digit() => {
                 let start_pos = self.position;
                 if ch == '-' {
@@ -137,8 +230,8 @@ impl Tokenizer {
                     if let Some(next_ch) = self.peek() {
                         if next_ch.is_ascii_digit() {
                             self.position = start_pos;
-                            let num = self.read_number()?;
-                            Ok(Some(Token::Number(num)))
+                            let token = self.read_number()?;
+                            Ok(Some(token))
                         } else {
                             self.position = start_pos;
                             let sym = self.read_symbol();
@@ -150,8 +243,8 @@ impl Tokenizer {
                         Ok(Some(Token::Symbol(sym)))
                     }
                 } else {
-                    let num = self.read_number()?;
-                    Ok(Some(Token::Number(num)))
+                    let token = self.read_number()?;
+                    Ok(Some(token))
                 }
             }
             Some(':') => {

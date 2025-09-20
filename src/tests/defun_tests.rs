@@ -1,14 +1,17 @@
-use crate::interpreter::*;
 use crate::interpreter::types::SymbolData;
+use crate::interpreter::*;
 
 #[test]
 fn test_defun_basic() {
     let mut evaluator = Evaluator::new();
     let result = evaluator.eval_str("(defun square (x) (* x x))").unwrap();
-    assert_eq!(result, Expr::Symbol(SymbolData::Interned("square".to_string())));
+    assert_eq!(
+        result,
+        Expr::Symbol(SymbolData::Interned("square".to_string()))
+    );
 
     let result = evaluator.eval_str("(square 5)").unwrap();
-    assert_eq!(result, Expr::Number(25.0));
+    assert_eq!(result, Expr::Integer(25));
 }
 
 #[test]
@@ -18,7 +21,7 @@ fn test_defun_multiple_params() {
         .eval_str("(defun add3 (a b c) (+ a (+ b c)))")
         .unwrap();
     let result = evaluator.eval_str("(add3 10 20 30)").unwrap();
-    assert_eq!(result, Expr::Number(60.0));
+    assert_eq!(result, Expr::Integer(60));
 }
 
 #[test]
@@ -32,7 +35,7 @@ fn test_defun_multiple_body_expressions() {
         )
         .unwrap();
     let result = evaluator.eval_str("(compute 5)").unwrap();
-    assert_eq!(result, Expr::Number(20.0));
+    assert_eq!(result, Expr::Integer(20));
 }
 
 #[test]
@@ -47,7 +50,7 @@ fn test_defun_recursive() {
         )
         .unwrap();
     let result = evaluator.eval_str("(factorial 5)").unwrap();
-    assert_eq!(result, Expr::Number(120.0));
+    assert_eq!(result, Expr::Integer(120));
 }
 
 #[test]
@@ -58,7 +61,7 @@ fn test_defun_with_closures() {
         .eval_str("(defun add_offset (x) (+ x offset))")
         .unwrap();
     let result = evaluator.eval_str("(add_offset 50)").unwrap();
-    assert_eq!(result, Expr::Number(150.0));
+    assert_eq!(result, Expr::Integer(150));
 }
 
 #[test]
@@ -66,15 +69,15 @@ fn test_defun_no_params() {
     let mut evaluator = Evaluator::new();
     evaluator.eval_str("(defun get_constant () 42)").unwrap();
     let result = evaluator.eval_str("(get_constant)").unwrap();
-    assert_eq!(result, Expr::Number(42.0));
+    assert_eq!(result, Expr::Integer(42));
 }
 
 #[test]
 fn test_defun_overwrite() {
     let mut evaluator = Evaluator::new();
     evaluator.eval_str("(defun foo (x) (* x 2))").unwrap();
-    assert_eq!(evaluator.eval_str("(foo 5)").unwrap(), Expr::Number(10.0));
+    assert_eq!(evaluator.eval_str("(foo 5)").unwrap(), Expr::Integer(10));
 
     evaluator.eval_str("(defun foo (x) (* x 3))").unwrap();
-    assert_eq!(evaluator.eval_str("(foo 5)").unwrap(), Expr::Number(15.0));
+    assert_eq!(evaluator.eval_str("(foo 5)").unwrap(), Expr::Integer(15));
 }

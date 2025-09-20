@@ -7,10 +7,10 @@ fn test_tokenizer_numbers() {
     assert_eq!(
         tokens,
         vec![
-            Token::Number(42.0),
-            Token::Number(3.14),
-            Token::Number(-17.0),
-            Token::Number(-2.5),
+            Token::Integer(42),
+            Token::Float(3.14),
+            Token::Integer(-17),
+            Token::Float(-2.5),
         ]
     );
 }
@@ -54,13 +54,13 @@ fn test_tokenizer_lists() {
         vec![
             Token::LeftParen,
             Token::Symbol("+".to_string()),
-            Token::Number(1.0),
-            Token::Number(2.0),
+            Token::Integer(1),
+            Token::Integer(2),
             Token::RightParen,
             Token::LeftParen,
             Token::Symbol("define".to_string()),
             Token::Symbol("x".to_string()),
-            Token::Number(10.0),
+            Token::Integer(10),
             Token::RightParen,
         ]
     );

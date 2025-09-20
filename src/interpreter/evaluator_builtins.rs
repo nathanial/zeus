@@ -1,5 +1,8 @@
 use crate::interpreter::evaluator::Evaluator;
-use crate::interpreter::types::{EvalError, EvalResult, Expr};
+use crate::interpreter::types::{EvalError, EvalResult, Expr, HashKey, SymbolData};
+use std::char;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 impl Evaluator {
     pub fn apply_builtin(&mut self, name: &str, args: &[Expr]) -> EvalResult {
@@ -47,23 +50,59 @@ impl Evaluator {
             "put" => self.builtin_put(args),
             "symbol-plist" => self.builtin_symbol_plist(args),
 
+            // Vector operations
+            "vector" => Ok(Expr::Vector(args.to_vec())),
+            "make-vector" => self.builtin_make_vector(args),
+            "vector-ref" => self.builtin_vector_ref(args),
+            "vector-set!" => self.builtin_vector_set(args),
+            "vector-length" => self.builtin_vector_length(args),
+
+            // Hash table operations
+            "make-hash-table" => self.builtin_make_hash_table(args),
+            "hash-set!" => self.builtin_hash_set(args),
+            "hash-ref" => self.builtin_hash_ref(args),
+            "hash-remove!" => self.builtin_hash_remove(args),
+            "hash-keys" => self.builtin_hash_keys(args),
+
+            // Character operations
+            "char=" => self.builtin_char_equal(args),
+            "char<" => self.builtin_char_less(args),
+            "char>" => self.builtin_char_greater(args),
+            "char->integer" => self.builtin_char_to_integer(args),
+            "integer->char" => self.builtin_integer_to_char(args),
+
+            // Type predicates
+            "integerp" => self.builtin_integerp(args),
+            "floatp" => self.builtin_floatp(args),
+            "rationalp" => self.builtin_rationalp(args),
+            "numberp" => self.builtin_numberp(args),
+            "characterp" => self.builtin_characterp(args),
+            "vectorp" => self.builtin_vectorp(args),
+            "hash-table-p" => self.builtin_hash_table_p(args),
+
             _ => Err(EvalError::message(format!("Unknown function: {}", name))),
         }
     }
 
     fn builtin_add(&mut self, args: &[Expr]) -> EvalResult {
         let mut sum = 0.0;
+        let mut all_integers = true;
+
         for arg in args {
-            if let Expr::Number(n) = arg {
-                sum += n;
-            } else {
-                return Err(EvalError::message(format!(
-                    "+ requires numeric arguments, got {:?}",
-                    arg
-                )));
+            let n = Self::to_number(arg).map_err(|_| {
+                EvalError::message(format!("+ requires numeric arguments, got {:?}", arg))
+            })?;
+            sum += n;
+            if !matches!(arg, Expr::Integer(_)) {
+                all_integers = false;
             }
         }
-        Ok(Expr::Number(sum))
+
+        if all_integers && sum.fract() == 0.0 {
+            Ok(Expr::Integer(sum as i64))
+        } else {
+            Ok(Expr::Float(sum))
+        }
     }
 
     fn builtin_subtract(&mut self, args: &[Expr]) -> EvalResult {
@@ -71,44 +110,56 @@ impl Evaluator {
             return Err(EvalError::message("- requires at least 1 argument"));
         }
 
-        if let Expr::Number(first) = &args[0] {
-            if args.len() == 1 {
-                return Ok(Expr::Number(-first));
-            }
+        let first = Self::to_number(&args[0]).map_err(|_| {
+            EvalError::message(format!("- requires numeric arguments, got {:?}", args[0]))
+        })?;
 
-            let mut result = *first;
-            for arg in &args[1..] {
-                if let Expr::Number(n) = arg {
-                    result -= n;
-                } else {
-                    return Err(EvalError::message(format!(
-                        "- requires numeric arguments, got {:?}",
-                        arg
-                    )));
-                }
+        if args.len() == 1 {
+            return match &args[0] {
+                Expr::Integer(n) => Ok(Expr::Integer(-n)),
+                _ => Ok(Expr::Float(-first)),
+            };
+        }
+
+        let mut result = first;
+        let mut all_integers = matches!(&args[0], Expr::Integer(_));
+
+        for arg in &args[1..] {
+            let n = Self::to_number(arg).map_err(|_| {
+                EvalError::message(format!("- requires numeric arguments, got {:?}", arg))
+            })?;
+            result -= n;
+            if !matches!(arg, Expr::Integer(_)) {
+                all_integers = false;
             }
-            Ok(Expr::Number(result))
+        }
+
+        if all_integers && result.fract() == 0.0 {
+            Ok(Expr::Integer(result as i64))
         } else {
-            Err(EvalError::message(format!(
-                "- requires numeric arguments, got {:?}",
-                args[0]
-            )))
+            Ok(Expr::Float(result))
         }
     }
 
     fn builtin_multiply(&mut self, args: &[Expr]) -> EvalResult {
         let mut product = 1.0;
+        let mut all_integers = true;
+
         for arg in args {
-            if let Expr::Number(n) = arg {
-                product *= n;
-            } else {
-                return Err(EvalError::message(format!(
-                    "* requires numeric arguments, got {:?}",
-                    arg
-                )));
+            let n = Self::to_number(arg).map_err(|_| {
+                EvalError::message(format!("* requires numeric arguments, got {:?}", arg))
+            })?;
+            product *= n;
+            if !matches!(arg, Expr::Integer(_)) {
+                all_integers = false;
             }
         }
-        Ok(Expr::Number(product))
+
+        if all_integers && product.fract() == 0.0 {
+            Ok(Expr::Integer(product as i64))
+        } else {
+            Ok(Expr::Float(product))
+        }
     }
 
     fn builtin_divide(&mut self, args: &[Expr]) -> EvalResult {
@@ -116,32 +167,29 @@ impl Evaluator {
             return Err(EvalError::message("/ requires at least 1 argument"));
         }
 
-        if let Expr::Number(first) = &args[0] {
-            if args.len() == 1 {
-                return Ok(Expr::Number(1.0 / first));
-            }
+        let first = Self::to_number(&args[0]).map_err(|_| {
+            EvalError::message(format!("/ requires numeric arguments, got {:?}", args[0]))
+        })?;
 
-            let mut result = *first;
-            for arg in &args[1..] {
-                if let Expr::Number(n) = arg {
-                    if *n == 0.0 {
-                        return Err(EvalError::message("Division by zero"));
-                    }
-                    result /= n;
-                } else {
-                    return Err(EvalError::message(format!(
-                        "/ requires numeric arguments, got {:?}",
-                        arg
-                    )));
-                }
-            }
-            Ok(Expr::Number(result))
-        } else {
-            Err(EvalError::message(format!(
-                "/ requires numeric arguments, got {:?}",
-                args[0]
-            )))
+        if first == 0.0 && args.len() == 1 {
+            return Err(EvalError::message("Division by zero"));
         }
+
+        if args.len() == 1 {
+            return Ok(Expr::Float(1.0 / first));
+        }
+
+        let mut result = first;
+        for arg in &args[1..] {
+            let n = Self::to_number(arg).map_err(|_| {
+                EvalError::message(format!("/ requires numeric arguments, got {:?}", arg))
+            })?;
+            if n == 0.0 {
+                return Err(EvalError::message("Division by zero"));
+            }
+            result /= n;
+        }
+        Ok(Expr::Float(result))
     }
 
     fn builtin_equal(&mut self, args: &[Expr]) -> EvalResult {
@@ -150,13 +198,18 @@ impl Evaluator {
         }
 
         let equal = match (&args[0], &args[1]) {
-            (Expr::Number(a), Expr::Number(b)) => (a - b).abs() < f64::EPSILON,
+            (a, b) if Self::to_number(a).is_ok() && Self::to_number(b).is_ok() => {
+                let a_val = Self::to_number(a).unwrap();
+                let b_val = Self::to_number(b).unwrap();
+                (a_val - b_val).abs() < f64::EPSILON
+            }
             (Expr::String(a), Expr::String(b)) => a == b,
+            (Expr::Character(a), Expr::Character(b)) => a == b,
             (Expr::Symbol(a), Expr::Symbol(b)) => a == b,
             _ => false,
         };
 
-        Ok(Expr::Number(if equal { 1.0 } else { 0.0 }))
+        Ok(Evaluator::bool_to_expr(equal))
     }
 
     fn builtin_less(&mut self, args: &[Expr]) -> EvalResult {
@@ -164,11 +217,12 @@ impl Evaluator {
             return Err(EvalError::message("< requires exactly 2 arguments"));
         }
 
-        if let (Expr::Number(a), Expr::Number(b)) = (&args[0], &args[1]) {
-            Ok(Expr::Number(if a < b { 1.0 } else { 0.0 }))
-        } else {
-            Err(EvalError::message("< requires numeric arguments"))
-        }
+        let a = Self::to_number(&args[0])
+            .map_err(|_| EvalError::message("< requires numeric arguments"))?;
+        let b = Self::to_number(&args[1])
+            .map_err(|_| EvalError::message("< requires numeric arguments"))?;
+
+        Ok(Evaluator::bool_to_expr(a < b))
     }
 
     fn builtin_greater(&mut self, args: &[Expr]) -> EvalResult {
@@ -176,170 +230,355 @@ impl Evaluator {
             return Err(EvalError::message("> requires exactly 2 arguments"));
         }
 
-        if let (Expr::Number(a), Expr::Number(b)) = (&args[0], &args[1]) {
-            Ok(Expr::Number(if a > b { 1.0 } else { 0.0 }))
-        } else {
-            Err(EvalError::message("> requires numeric arguments"))
-        }
+        let a = Self::to_number(&args[0])
+            .map_err(|_| EvalError::message("> requires numeric arguments"))?;
+        let b = Self::to_number(&args[1])
+            .map_err(|_| EvalError::message("> requires numeric arguments"))?;
+
+        Ok(Evaluator::bool_to_expr(a > b))
     }
 
-    fn builtin_car(&mut self, args: &[Expr]) -> EvalResult {
-        if args.len() != 1 {
-            return Err(EvalError::message("car requires exactly 1 argument"));
+    // Vector operations
+    fn builtin_make_vector(&mut self, args: &[Expr]) -> EvalResult {
+        if args.is_empty() || args.len() > 2 {
+            return Err(EvalError::message("make-vector requires 1 or 2 arguments"));
         }
 
-        if let Expr::List(list) = &args[0] {
-            if list.is_empty() {
-                Err(EvalError::message("car: empty list"))
-            } else {
-                Ok(list[0].clone())
+        let size = match &args[0] {
+            Expr::Integer(n) if *n >= 0 => *n as usize,
+            _ => {
+                return Err(EvalError::message(
+                    "make-vector requires a non-negative integer size",
+                ))
             }
+        };
+
+        let init = if args.len() == 2 {
+            args[1].clone()
         } else {
-            Err(EvalError::message("car requires a list argument"))
-        }
+            Expr::Integer(0)
+        };
+
+        Ok(Expr::Vector(vec![init; size]))
     }
 
-    fn builtin_cdr(&mut self, args: &[Expr]) -> EvalResult {
-        if args.len() != 1 {
-            return Err(EvalError::message("cdr requires exactly 1 argument"));
-        }
-
-        if let Expr::List(list) = &args[0] {
-            if list.is_empty() {
-                Ok(Expr::List(vec![]))
-            } else {
-                Ok(Expr::List(list[1..].to_vec()))
-            }
-        } else {
-            Err(EvalError::message("cdr requires a list argument"))
-        }
-    }
-
-    fn builtin_cons(&mut self, args: &[Expr]) -> EvalResult {
+    fn builtin_vector_ref(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 2 {
-            return Err(EvalError::message("cons requires exactly 2 arguments"));
+            return Err(EvalError::message(
+                "vector-ref requires exactly 2 arguments",
+            ));
         }
 
-        if let Expr::List(list) = &args[1] {
-            let mut new_list = vec![args[0].clone()];
-            new_list.extend_from_slice(list);
-            Ok(Expr::List(new_list))
-        } else {
-            Ok(Expr::List(vec![args[0].clone(), args[1].clone()]))
-        }
-    }
-
-    fn builtin_append(&mut self, args: &[Expr]) -> EvalResult {
-        let mut result = Vec::new();
-        for arg in args {
-            match arg {
-                Expr::List(list) => result.extend_from_slice(list),
-                _ => return Err(EvalError::message("append requires list arguments")),
+        let vec = match &args[0] {
+            Expr::Vector(v) => v,
+            _ => {
+                return Err(EvalError::message(
+                    "vector-ref requires a vector as first argument",
+                ))
             }
-        }
-        Ok(Expr::List(result))
+        };
+
+        let index = match &args[1] {
+            Expr::Integer(n) if *n >= 0 => *n as usize,
+            _ => {
+                return Err(EvalError::message(
+                    "vector-ref requires a non-negative integer index",
+                ))
+            }
+        };
+
+        vec.get(index)
+            .cloned()
+            .ok_or_else(|| EvalError::message(format!("vector-ref: index {} out of bounds", index)))
     }
 
-    fn builtin_reverse(&mut self, args: &[Expr]) -> EvalResult {
+    fn builtin_vector_set(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 3 {
+            return Err(EvalError::message(
+                "vector-set! requires exactly 3 arguments",
+            ));
+        }
+
+        let mut vec = match &args[0] {
+            Expr::Vector(v) => v.clone(),
+            _ => {
+                return Err(EvalError::message(
+                    "vector-set! requires a vector as first argument",
+                ))
+            }
+        };
+
+        let index = match &args[1] {
+            Expr::Integer(n) if *n >= 0 => *n as usize,
+            _ => {
+                return Err(EvalError::message(
+                    "vector-set! requires a non-negative integer index",
+                ))
+            }
+        };
+
+        if index >= vec.len() {
+            return Err(EvalError::message(format!(
+                "vector-set!: index {} out of bounds",
+                index
+            )));
+        }
+
+        vec[index] = args[2].clone();
+        Ok(Expr::Vector(vec))
+    }
+
+    fn builtin_vector_length(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 1 {
-            return Err(EvalError::message("reverse requires exactly 1 argument"));
+            return Err(EvalError::message(
+                "vector-length requires exactly 1 argument",
+            ));
         }
 
         match &args[0] {
-            Expr::List(list) => {
-                let mut reversed = list.clone();
-                reversed.reverse();
-                Ok(Expr::List(reversed))
-            }
-            _ => Err(EvalError::message("reverse requires a list argument")),
+            Expr::Vector(v) => Ok(Expr::Integer(v.len() as i64)),
+            _ => Err(EvalError::message("vector-length requires a vector")),
         }
     }
 
-    fn builtin_length(&mut self, args: &[Expr]) -> EvalResult {
+    // Hash table operations
+    fn builtin_make_hash_table(&mut self, _args: &[Expr]) -> EvalResult {
+        Ok(Expr::HashTable(Rc::new(HashMap::new())))
+    }
+
+    fn builtin_hash_set(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 3 {
+            return Err(EvalError::message("hash-set! requires exactly 3 arguments"));
+        }
+
+        let mut table = match &args[0] {
+            Expr::HashTable(h) => (**h).clone(),
+            _ => {
+                return Err(EvalError::message(
+                    "hash-set! requires a hash table as first argument",
+                ))
+            }
+        };
+
+        let key = Self::expr_to_hashkey(&args[1])
+            .ok_or_else(|| EvalError::message("hash-set! requires a hashable key"))?;
+
+        table.insert(key, args[2].clone());
+        Ok(Expr::HashTable(Rc::new(table)))
+    }
+
+    fn builtin_hash_ref(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() < 2 || args.len() > 3 {
+            return Err(EvalError::message("hash-ref requires 2 or 3 arguments"));
+        }
+
+        let table = match &args[0] {
+            Expr::HashTable(h) => h,
+            _ => {
+                return Err(EvalError::message(
+                    "hash-ref requires a hash table as first argument",
+                ))
+            }
+        };
+
+        let key = Self::expr_to_hashkey(&args[1])
+            .ok_or_else(|| EvalError::message("hash-ref requires a hashable key"))?;
+
+        table
+            .get(&key)
+            .cloned()
+            .or_else(|| {
+                if args.len() == 3 {
+                    Some(args[2].clone())
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| EvalError::message(format!("hash-ref: key not found: {:?}", args[1])))
+    }
+
+    fn builtin_hash_remove(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 2 {
+            return Err(EvalError::message(
+                "hash-remove! requires exactly 2 arguments",
+            ));
+        }
+
+        let mut table = match &args[0] {
+            Expr::HashTable(h) => (**h).clone(),
+            _ => {
+                return Err(EvalError::message(
+                    "hash-remove! requires a hash table as first argument",
+                ))
+            }
+        };
+
+        let key = Self::expr_to_hashkey(&args[1])
+            .ok_or_else(|| EvalError::message("hash-remove! requires a hashable key"))?;
+
+        table.remove(&key);
+        Ok(Expr::HashTable(Rc::new(table)))
+    }
+
+    fn builtin_hash_keys(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 1 {
-            return Err(EvalError::message("length requires exactly 1 argument"));
+            return Err(EvalError::message("hash-keys requires exactly 1 argument"));
+        }
+
+        let table = match &args[0] {
+            Expr::HashTable(h) => h,
+            _ => return Err(EvalError::message("hash-keys requires a hash table")),
+        };
+
+        let keys: Vec<Expr> = table
+            .keys()
+            .map(|k| match k {
+                HashKey::Integer(n) => Expr::Integer(*n),
+                HashKey::Symbol(s) => Expr::Symbol(SymbolData::Interned(s.clone())),
+                HashKey::String(s) => Expr::String(s.clone()),
+                HashKey::Character(c) => Expr::Character(*c),
+                HashKey::Keyword(s) => Expr::Symbol(SymbolData::Keyword(s.clone())),
+            })
+            .collect();
+
+        Ok(Expr::List(keys))
+    }
+
+    // Character operations
+    fn builtin_char_equal(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 2 {
+            return Err(EvalError::message("char= requires exactly 2 arguments"));
+        }
+
+        match (&args[0], &args[1]) {
+            (Expr::Character(a), Expr::Character(b)) => Ok(Evaluator::bool_to_expr(a == b)),
+            _ => Err(EvalError::message("char= requires character arguments")),
+        }
+    }
+
+    fn builtin_char_less(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 2 {
+            return Err(EvalError::message("char< requires exactly 2 arguments"));
+        }
+
+        match (&args[0], &args[1]) {
+            (Expr::Character(a), Expr::Character(b)) => Ok(Evaluator::bool_to_expr(a < b)),
+            _ => Err(EvalError::message("char< requires character arguments")),
+        }
+    }
+
+    fn builtin_char_greater(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 2 {
+            return Err(EvalError::message("char> requires exactly 2 arguments"));
+        }
+
+        match (&args[0], &args[1]) {
+            (Expr::Character(a), Expr::Character(b)) => Ok(Evaluator::bool_to_expr(a > b)),
+            _ => Err(EvalError::message("char> requires character arguments")),
+        }
+    }
+
+    fn builtin_char_to_integer(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 1 {
+            return Err(EvalError::message(
+                "char->integer requires exactly 1 argument",
+            ));
         }
 
         match &args[0] {
-            Expr::List(list) => Ok(Expr::Number(list.len() as f64)),
-            Expr::String(s) => Ok(Expr::Number(s.len() as f64)),
+            Expr::Character(c) => Ok(Expr::Integer(*c as i64)),
+            _ => Err(EvalError::message("char->integer requires a character")),
+        }
+    }
+
+    fn builtin_integer_to_char(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 1 {
+            return Err(EvalError::message(
+                "integer->char requires exactly 1 argument",
+            ));
+        }
+
+        match &args[0] {
+            Expr::Integer(n) if *n >= 0 && *n <= 1114111 => {
+                Ok(Expr::Character(char::from_u32(*n as u32).unwrap()))
+            }
             _ => Err(EvalError::message(
-                "length requires a list or string argument",
+                "integer->char requires a valid Unicode code point",
             )),
         }
     }
 
-    fn builtin_gensym(&mut self, args: &[Expr]) -> EvalResult {
-        let prefix = if args.is_empty() {
-            ""
-        } else if args.len() == 1 {
-            match &args[0] {
-                Expr::String(s) => s,
-                Expr::Symbol(sym_data) => sym_data.name(),
-                _ => return Err(EvalError::message("gensym prefix must be a string or symbol")),
-            }
-        } else {
-            return Err(EvalError::message("gensym takes at most 1 argument"));
-        };
-
-        let sym_data = self.environment.generate_gensym(prefix);
-        Ok(Expr::Symbol(sym_data))
-    }
-
-    fn builtin_get(&mut self, args: &[Expr]) -> EvalResult {
-        if args.len() != 2 {
-            return Err(EvalError::message("get requires exactly 2 arguments"));
-        }
-
-        let symbol = match &args[0] {
-            Expr::Symbol(sym_data) => sym_data.name(),
-            _ => return Err(EvalError::message("get: first argument must be a symbol")),
-        };
-
-        let property = match &args[1] {
-            Expr::Symbol(sym_data) => sym_data.name(),
-            Expr::String(s) => s,
-            _ => return Err(EvalError::message("get: second argument must be a symbol or string")),
-        };
-
-        Ok(self.environment.get_property(symbol, property)
-            .unwrap_or_else(|| Expr::List(vec![])))
-    }
-
-    fn builtin_put(&mut self, args: &[Expr]) -> EvalResult {
-        if args.len() != 3 {
-            return Err(EvalError::message("put requires exactly 3 arguments"));
-        }
-
-        let symbol = match &args[0] {
-            Expr::Symbol(sym_data) => sym_data.name().to_string(),
-            _ => return Err(EvalError::message("put: first argument must be a symbol")),
-        };
-
-        let property = match &args[1] {
-            Expr::Symbol(sym_data) => sym_data.name().to_string(),
-            Expr::String(s) => s.clone(),
-            _ => return Err(EvalError::message("put: second argument must be a symbol or string")),
-        };
-
-        let value = args[2].clone();
-        self.environment.set_property(symbol, property, value.clone());
-        Ok(value)
-    }
-
-    fn builtin_symbol_plist(&mut self, args: &[Expr]) -> EvalResult {
+    // Type predicates
+    fn builtin_integerp(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 1 {
-            return Err(EvalError::message("symbol-plist requires exactly 1 argument"));
+            return Err(EvalError::message("integerp requires exactly 1 argument"));
         }
 
-        let symbol = match &args[0] {
-            Expr::Symbol(sym_data) => sym_data.name(),
-            _ => return Err(EvalError::message("symbol-plist: argument must be a symbol")),
-        };
-
-        let plist = self.environment.get_symbol_plist(symbol);
-        Ok(Expr::List(plist))
+        Ok(Evaluator::bool_to_expr(matches!(args[0], Expr::Integer(_))))
     }
 
-    // Continued in next part...
+    fn builtin_floatp(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 1 {
+            return Err(EvalError::message("floatp requires exactly 1 argument"));
+        }
+
+        Ok(Evaluator::bool_to_expr(matches!(args[0], Expr::Float(_))))
+    }
+
+    fn builtin_rationalp(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 1 {
+            return Err(EvalError::message("rationalp requires exactly 1 argument"));
+        }
+
+        Ok(Evaluator::bool_to_expr(matches!(
+            args[0],
+            Expr::Rational { .. }
+        )))
+    }
+
+    fn builtin_numberp(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 1 {
+            return Err(EvalError::message("numberp requires exactly 1 argument"));
+        }
+
+        let is_number = matches!(
+            args[0],
+            Expr::Integer(_) | Expr::Float(_) | Expr::Rational { .. }
+        );
+        Ok(Evaluator::bool_to_expr(is_number))
+    }
+
+    fn builtin_characterp(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 1 {
+            return Err(EvalError::message("characterp requires exactly 1 argument"));
+        }
+
+        Ok(Evaluator::bool_to_expr(matches!(
+            args[0],
+            Expr::Character(_)
+        )))
+    }
+
+    fn builtin_vectorp(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 1 {
+            return Err(EvalError::message("vectorp requires exactly 1 argument"));
+        }
+
+        Ok(Evaluator::bool_to_expr(matches!(args[0], Expr::Vector(_))))
+    }
+
+    fn builtin_hash_table_p(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 1 {
+            return Err(EvalError::message(
+                "hash-table-p requires exactly 1 argument",
+            ));
+        }
+
+        Ok(Evaluator::bool_to_expr(matches!(
+            args[0],
+            Expr::HashTable(_)
+        )))
+    }
+
+    // Continued in evaluator_builtins_cont.rs...
 }

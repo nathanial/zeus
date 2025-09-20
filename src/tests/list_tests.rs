@@ -6,7 +6,7 @@ fn test_eval_list() {
     let result = eval_to_list("(list 1 2 3)");
     assert_eq!(
         result,
-        vec![Expr::Number(1.0), Expr::Number(2.0), Expr::Number(3.0),]
+        vec![Expr::Integer(1), Expr::Integer(2), Expr::Integer(3),]
     );
 
     let result = eval_to_list("(list)");
@@ -17,14 +17,14 @@ fn test_eval_list() {
 fn test_eval_car() {
     assert_eq!(eval_to_number("(car (list 1 2 3))"), 1.0);
 
-    let result = Evaluator::eval_once("(car (list))");
-    assert!(result.is_err());
+    let result = Evaluator::eval_once("(car (list))").unwrap();
+    assert_eq!(result, Expr::List(vec![]));
 }
 
 #[test]
 fn test_eval_cdr() {
     let result = eval_to_list("(cdr (list 1 2 3))");
-    assert_eq!(result, vec![Expr::Number(2.0), Expr::Number(3.0),]);
+    assert_eq!(result, vec![Expr::Integer(2), Expr::Integer(3),]);
 
     let result = eval_to_list("(cdr (list))");
     assert_eq!(result, vec![]);
@@ -35,11 +35,17 @@ fn test_eval_cons() {
     let result = eval_to_list("(cons 0 (list 1 2))");
     assert_eq!(
         result,
-        vec![Expr::Number(0.0), Expr::Number(1.0), Expr::Number(2.0),]
+        vec![Expr::Integer(0), Expr::Integer(1), Expr::Integer(2),]
     );
 
-    let result = eval_to_list("(cons 1 2)");
-    assert_eq!(result, vec![Expr::Number(1.0), Expr::Number(2.0),]);
+    let result = Evaluator::eval_once("(cons 1 2)").unwrap();
+    match result {
+        Expr::Cons(car, cdr) => {
+            assert_eq!(*car, Expr::Integer(1));
+            assert_eq!(*cdr, Expr::Integer(2));
+        }
+        other => panic!("Expected cons cell, got {:?}", other),
+    }
 }
 
 #[test]
@@ -48,10 +54,10 @@ fn test_append() {
     assert_eq!(
         result,
         vec![
-            Expr::Number(1.0),
-            Expr::Number(2.0),
-            Expr::Number(3.0),
-            Expr::Number(4.0),
+            Expr::Integer(1),
+            Expr::Integer(2),
+            Expr::Integer(3),
+            Expr::Integer(4),
         ]
     );
 
@@ -59,11 +65,11 @@ fn test_append() {
     assert_eq!(
         result,
         vec![
-            Expr::Number(1.0),
-            Expr::Number(2.0),
-            Expr::Number(3.0),
-            Expr::Number(4.0),
-            Expr::Number(5.0),
+            Expr::Integer(1),
+            Expr::Integer(2),
+            Expr::Integer(3),
+            Expr::Integer(4),
+            Expr::Integer(5),
         ]
     );
 
@@ -77,10 +83,10 @@ fn test_reverse() {
     assert_eq!(
         result,
         vec![
-            Expr::Number(4.0),
-            Expr::Number(3.0),
-            Expr::Number(2.0),
-            Expr::Number(1.0),
+            Expr::Integer(4),
+            Expr::Integer(3),
+            Expr::Integer(2),
+            Expr::Integer(1),
         ]
     );
 
@@ -114,11 +120,11 @@ fn test_nthcdr() {
     let result = eval_to_list("(nthcdr 0 (list 1 2 3))");
     assert_eq!(
         result,
-        vec![Expr::Number(1.0), Expr::Number(2.0), Expr::Number(3.0)]
+        vec![Expr::Integer(1), Expr::Integer(2), Expr::Integer(3)]
     );
 
     let result = eval_to_list("(nthcdr 1 (list 1 2 3))");
-    assert_eq!(result, vec![Expr::Number(2.0), Expr::Number(3.0)]);
+    assert_eq!(result, vec![Expr::Integer(2), Expr::Integer(3)]);
 
     let result = eval_to_list("(nthcdr 3 (list 1 2 3))");
     assert_eq!(result, vec![]);
@@ -130,10 +136,10 @@ fn test_nthcdr() {
 #[test]
 fn test_member() {
     let result = eval_to_list("(member 2 (list 1 2 3))");
-    assert_eq!(result, vec![Expr::Number(2.0), Expr::Number(3.0)]);
+    assert_eq!(result, vec![Expr::Integer(2), Expr::Integer(3)]);
 
     let result = eval_to_list("(member 3 (list 1 2 3))");
-    assert_eq!(result, vec![Expr::Number(3.0)]);
+    assert_eq!(result, vec![Expr::Integer(3)]);
 
     let result = eval_to_list("(member 5 (list 1 2 3))");
     assert_eq!(result, vec![]);
@@ -154,17 +160,17 @@ fn test_list_operations_combination() {
     evaluator.eval_str("(define lst (list 1 2 3 4 5))").unwrap();
 
     let result = evaluator.eval_str("(car (cdr lst))").unwrap();
-    assert_eq!(result, Expr::Number(2.0));
+    assert_eq!(result, Expr::Integer(2));
 
     let result = evaluator.eval_str("(cons 0 (reverse (cdr lst)))").unwrap();
     assert_eq!(
         result,
         Expr::List(vec![
-            Expr::Number(0.0),
-            Expr::Number(5.0),
-            Expr::Number(4.0),
-            Expr::Number(3.0),
-            Expr::Number(2.0),
+            Expr::Integer(0),
+            Expr::Integer(5),
+            Expr::Integer(4),
+            Expr::Integer(3),
+            Expr::Integer(2),
         ])
     );
 }

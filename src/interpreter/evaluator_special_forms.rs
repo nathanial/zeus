@@ -22,7 +22,7 @@ impl Evaluator {
                     if is_else {
                         // Execute else branch
                         if clause_list.len() < 2 {
-                            return Ok(Expr::Number(1.0)); // else with no body returns true
+                            return Ok(Expr::Integer(1)); // else with no body returns true
                         }
                         let mut result = Ok(Expr::List(vec![]));
                         for expr in &clause_list[1..] {
@@ -36,12 +36,7 @@ impl Evaluator {
 
                     // Evaluate condition
                     let cond_result = self.eval(condition)?;
-                    let is_true = match cond_result {
-                        Expr::Number(n) => n != 0.0,
-                        Expr::List(ref l) => !l.is_empty(),
-                        Expr::String(ref s) => !s.is_empty(),
-                        _ => true,
-                    };
+                    let is_true = Evaluator::is_truthy(&cond_result);
 
                     if is_true {
                         if clause_list.len() == 1 {
@@ -68,20 +63,16 @@ impl Evaluator {
 
     pub fn eval_and(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() == 1 {
-            return Ok(Expr::Number(1.0)); // (and) with no args returns true
+            return Ok(Evaluator::bool_to_expr(true)); // (and) with no args returns true
         }
 
-        let mut result = Expr::Number(1.0);
+        let mut result = Evaluator::bool_to_expr(true);
         for expr in &list[1..] {
             result = self.eval(expr)?;
-            let is_false = match &result {
-                Expr::Number(n) => *n == 0.0,
-                Expr::List(l) => l.is_empty(),
-                _ => false,
-            };
+            let is_false = !Evaluator::is_truthy(&result);
 
             if is_false {
-                return Ok(Expr::Number(0.0));
+                return Ok(result);
             }
         }
 
@@ -90,23 +81,19 @@ impl Evaluator {
 
     pub fn eval_or(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() == 1 {
-            return Ok(Expr::Number(0.0)); // (or) with no args returns false
+            return Ok(Expr::List(vec![])); // (or) with no args returns false
         }
 
         for expr in &list[1..] {
             let result = self.eval(expr)?;
-            let is_true = match &result {
-                Expr::Number(n) => *n != 0.0,
-                Expr::List(l) => !l.is_empty(),
-                _ => true,
-            };
+            let is_true = Evaluator::is_truthy(&result);
 
             if is_true {
                 return Ok(result); // Return first truthy value
             }
         }
 
-        Ok(Expr::Number(0.0)) // All were falsy
+        Ok(Expr::List(vec![])) // All were falsy
     }
 
     pub fn eval_progn(&mut self, list: &[Expr]) -> EvalResult {
@@ -130,11 +117,7 @@ impl Evaluator {
         }
 
         let condition = self.eval(&list[1])?;
-        let is_true = match condition {
-            Expr::Number(n) => n != 0.0,
-            Expr::List(ref l) => !l.is_empty(),
-            _ => true,
-        };
+        let is_true = Evaluator::is_truthy(&condition);
 
         if is_true {
             let mut result = Ok(Expr::List(vec![]));
@@ -156,11 +139,7 @@ impl Evaluator {
         }
 
         let condition = self.eval(&list[1])?;
-        let is_false = match condition {
-            Expr::Number(n) => n == 0.0,
-            Expr::List(ref l) => l.is_empty(),
-            _ => false,
-        };
+        let is_false = !Evaluator::is_truthy(&condition);
 
         if is_false {
             let mut result = Ok(Expr::List(vec![]));
@@ -190,7 +169,11 @@ impl Evaluator {
 
                     // Check for else/otherwise clause
                     let is_else = match test_value {
-                        Expr::Symbol(sym_data) if sym_data.name() == "else" || sym_data.name() == "otherwise" => true,
+                        Expr::Symbol(sym_data)
+                            if sym_data.name() == "else" || sym_data.name() == "otherwise" =>
+                        {
+                            true
+                        }
                         _ => false,
                     };
 
@@ -234,11 +217,18 @@ impl Evaluator {
 
     pub fn expr_equal(&self, a: &Expr, b: &Expr) -> bool {
         match (a, b) {
-            (Expr::Number(x), Expr::Number(y)) => (x - y).abs() < f64::EPSILON,
+            (x, y) if Evaluator::to_number(x).is_ok() && Evaluator::to_number(y).is_ok() => {
+                let x_val = Evaluator::to_number(x).unwrap();
+                let y_val = Evaluator::to_number(y).unwrap();
+                (x_val - y_val).abs() < f64::EPSILON
+            }
             (Expr::String(x), Expr::String(y)) => x == y,
             (Expr::Symbol(x), Expr::Symbol(y)) => x == y,
             (Expr::List(x), Expr::List(y)) => {
                 x.len() == y.len() && x.iter().zip(y.iter()).all(|(a, b)| self.expr_equal(a, b))
+            }
+            (Expr::Cons(ax, ay), Expr::Cons(bx, by)) => {
+                self.expr_equal(ax, bx) && self.expr_equal(ay, by)
             }
             _ => false,
         }
@@ -289,7 +279,7 @@ impl Evaluator {
                             return Err(EvalError::message("Cannot bind to a keyword"));
                         }
                         sym_data.name().to_string()
-                    },
+                    }
                     _ => return Err(EvalError::message("do binding name must be a symbol")),
                 };
 
@@ -312,7 +302,7 @@ impl Evaluator {
 
             loop {
                 let test_result = self.eval(&test_clause[0])?;
-                if self.is_truthy(&test_result) {
+                if Evaluator::is_truthy(&test_result) {
                     if test_clause.len() == 1 {
                         return Ok(test_result);
                     }
@@ -559,7 +549,8 @@ impl Evaluator {
         match func {
             Expr::Symbol(sym_data) => self.apply_builtin(sym_data.name(), &args),
             Expr::List(lambda)
-                if lambda.len() == 3 && matches!(&lambda[0], Expr::Symbol(sym_data) if sym_data.name() == "lambda") =>
+                if lambda.len() == 3
+                    && matches!(&lambda[0], Expr::Symbol(sym_data) if sym_data.name() == "lambda") =>
             {
                 self.apply_lambda(&lambda, &args)
             }

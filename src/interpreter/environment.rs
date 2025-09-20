@@ -18,13 +18,75 @@ impl Environment {
 
     pub fn define_builtins(&mut self) {
         let builtins = vec![
-            "+", "-", "*", "/", "=", "<", ">", "list", "car", "cdr", "cons", "append", "reverse",
-            "length", "nth", "nthcdr", "mapcar", "filter", "remove", "member", "reduce", "apply",
-            "funcall", "print", "println", "gensym", "get", "put", "symbol-plist",
+            "+",
+            "-",
+            "*",
+            "/",
+            "=",
+            "<",
+            ">",
+            "list",
+            "car",
+            "cdr",
+            "cons",
+            "append",
+            "reverse",
+            "length",
+            "nth",
+            "nthcdr",
+            "mapcar",
+            "filter",
+            "remove",
+            "member",
+            "reduce",
+            "apply",
+            "funcall",
+            "print",
+            "println",
+            "gensym",
+            "get",
+            "put",
+            "symbol-plist",
+            // Vector operations
+            "vector",
+            "make-vector",
+            "vector-ref",
+            "vector-set!",
+            "vector-length",
+            // Hash table operations
+            "make-hash-table",
+            "hash-set!",
+            "hash-ref",
+            "hash-remove!",
+            "hash-keys",
+            // Character operations
+            "char=",
+            "char<",
+            "char>",
+            "char->integer",
+            "integer->char",
+            // Type predicates
+            "integerp",
+            "floatp",
+            "rationalp",
+            "numberp",
+            "characterp",
+            "vectorp",
+            "hash-table-p",
         ];
         for builtin in builtins {
-            self.set(builtin.to_string(), Expr::Symbol(SymbolData::Interned(builtin.to_string())));
+            self.set(
+                builtin.to_string(),
+                Expr::Symbol(SymbolData::Interned(builtin.to_string())),
+            );
         }
+
+        // Standard Lisp truth constants
+        self.set(
+            "t".to_string(),
+            Expr::Symbol(SymbolData::Interned("t".to_string())),
+        );
+        self.set("nil".to_string(), Expr::List(vec![]));
     }
 
     pub fn push_scope(&mut self) {
@@ -79,7 +141,11 @@ impl Environment {
         }
     }
 
-    pub fn generate_gensym(&mut self, prefix: &str) -> SymbolData {
+    pub fn generate_gensym(&mut self, prefix: &str, counter_override: Option<u64>) -> SymbolData {
+        if let Some(counter) = counter_override {
+            self.gensym_counter = counter;
+        }
+
         let id = self.gensym_counter;
         self.gensym_counter += 1;
         let name = if prefix.is_empty() {

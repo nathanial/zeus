@@ -1,10 +1,9 @@
+use crate::interpreter::evaluator::Evaluator as Eval;
 use crate::interpreter::*;
 
 pub fn eval_to_number(input: &str) -> f64 {
-    match Evaluator::eval_once(input).unwrap() {
-        Expr::Number(n) => n,
-        other => panic!("Expected number, got {:?}", other),
-    }
+    let result = Evaluator::eval_once(input).unwrap();
+    Eval::to_number(&result).expect("Expected a number")
 }
 
 pub fn eval_to_string(input: &str) -> String {
@@ -19,4 +18,9 @@ pub fn eval_to_list(input: &str) -> Vec<Expr> {
         Expr::List(l) => l,
         other => panic!("Expected list, got {:?}", other),
     }
+}
+
+pub fn eval_to_bool(input: &str) -> bool {
+    let result = Evaluator::eval_once(input).unwrap();
+    Evaluator::is_truthy(&result)
 }

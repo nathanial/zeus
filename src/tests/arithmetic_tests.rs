@@ -39,12 +39,12 @@ fn test_eval_division_by_zero() {
 
 #[test]
 fn test_eval_comparison() {
-    assert_eq!(eval_to_number("(= 5 5)"), 1.0);
-    assert_eq!(eval_to_number("(= 5 3)"), 0.0);
-    assert_eq!(eval_to_number("(< 3 5)"), 1.0);
-    assert_eq!(eval_to_number("(< 5 3)"), 0.0);
-    assert_eq!(eval_to_number("(> 5 3)"), 1.0);
-    assert_eq!(eval_to_number("(> 3 5)"), 0.0);
+    assert!(eval_to_bool("(= 5 5)"));
+    assert!(!eval_to_bool("(= 5 3)"));
+    assert!(eval_to_bool("(< 3 5)"));
+    assert!(!eval_to_bool("(< 5 3)"));
+    assert!(eval_to_bool("(> 5 3)"));
+    assert!(!eval_to_bool("(> 3 5)"));
 }
 
 #[test]

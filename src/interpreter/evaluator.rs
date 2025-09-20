@@ -2,7 +2,7 @@ use crate::interpreter::{
     environment::Environment,
     parser::Parser,
     tokenizer::Tokenizer,
-    types::{EvalError, EvalResult, Expr, SymbolData},
+    types::{EvalError, EvalResult, Expr, HashKey, SymbolData},
 };
 
 pub struct Evaluator {
@@ -38,9 +38,54 @@ impl Evaluator {
         evaluator.eval_str(input)
     }
 
+    // Helper function to convert Expr to numeric value
+    pub fn to_number(expr: &Expr) -> Result<f64, String> {
+        match expr {
+            Expr::Integer(n) => Ok(*n as f64),
+            Expr::Float(f) => Ok(*f),
+            Expr::Rational {
+                numerator,
+                denominator,
+            } => Ok(*numerator as f64 / *denominator as f64),
+            _ => Err(format!("Not a number: {:?}", expr)),
+        }
+    }
+
+    // Helper to check if expression is truthy
+    pub fn is_truthy(expr: &Expr) -> bool {
+        !matches!(expr, Expr::List(list) if list.is_empty())
+    }
+
+    pub fn bool_to_expr(value: bool) -> Expr {
+        if value {
+            Expr::Symbol(SymbolData::Interned("t".to_string()))
+        } else {
+            Expr::List(vec![])
+        }
+    }
+
+    // Helper to convert Expr to HashKey for hash tables
+    pub fn expr_to_hashkey(expr: &Expr) -> Option<HashKey> {
+        match expr {
+            Expr::Integer(n) => Some(HashKey::Integer(*n)),
+            Expr::String(s) => Some(HashKey::String(s.clone())),
+            Expr::Character(ch) => Some(HashKey::Character(*ch)),
+            Expr::Symbol(SymbolData::Keyword(name)) => Some(HashKey::Keyword(name.clone())),
+            Expr::Symbol(SymbolData::Interned(name)) => Some(HashKey::Symbol(name.clone())),
+            _ => None,
+        }
+    }
+
     pub fn eval(&mut self, expr: &Expr) -> EvalResult {
         match expr {
-            Expr::Number(_) | Expr::String(_) => Ok(expr.clone()),
+            Expr::Integer(_)
+            | Expr::Float(_)
+            | Expr::Rational { .. }
+            | Expr::String(_)
+            | Expr::Character(_)
+            | Expr::Vector(_)
+            | Expr::HashTable(_)
+            | Expr::Cons(_, _) => Ok(expr.clone()),
             Expr::Symbol(sym_data) => {
                 match sym_data {
                     SymbolData::Keyword(_) => {
@@ -104,7 +149,8 @@ impl Evaluator {
                 return Err(EvalError::message("Cannot define a keyword"));
             }
             let value = self.eval(&list[2])?;
-            self.environment.set(sym_data.name().to_string(), value.clone());
+            self.environment
+                .set(sym_data.name().to_string(), value.clone());
             Ok(value)
         } else {
             Err(EvalError::message(
@@ -152,7 +198,10 @@ impl Evaluator {
         };
 
         // Build the lambda expression: (lambda params body...)
-        let mut lambda_expr = vec![Expr::Symbol(SymbolData::Interned("lambda".to_string())), params];
+        let mut lambda_expr = vec![
+            Expr::Symbol(SymbolData::Interned("lambda".to_string())),
+            params,
+        ];
 
         // If there are multiple body expressions, wrap them in progn
         if list.len() == 4 {
@@ -182,11 +231,7 @@ impl Evaluator {
         }
 
         let condition = self.eval(&list[1])?;
-        let is_true = match condition {
-            Expr::Number(n) => n != 0.0,
-            Expr::List(ref l) => !l.is_empty(),
-            _ => true,
-        };
+        let is_true = Self::is_truthy(&condition);
 
         if is_true {
             self.eval(&list[2])
@@ -352,7 +397,8 @@ impl Evaluator {
                             if sym_data.is_keyword() {
                                 return Err(EvalError::message("Cannot bind to a keyword"));
                             }
-                            self.environment.set(sym_data.name().to_string(), Expr::List(vec![]));
+                            self.environment
+                                .set(sym_data.name().to_string(), Expr::List(vec![]));
                         } else {
                             return Err(EvalError::message(
                                 "letrec binding must start with a symbol",
@@ -415,12 +461,4 @@ impl Evaluator {
     }
 
     // Continued in evaluator_special_forms.rs and evaluator_builtins.rs...
-    pub(crate) fn is_truthy(&self, expr: &Expr) -> bool {
-        match expr {
-            Expr::Number(n) => *n != 0.0,
-            Expr::List(list) => !list.is_empty(),
-            Expr::String(s) => !s.is_empty(),
-            _ => true,
-        }
-    }
 }

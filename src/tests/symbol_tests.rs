@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod symbol_tests {
     use crate::interpreter::evaluator::Evaluator;
+    use crate::interpreter::types::Expr;
 
     #[test]
     fn test_keyword_self_evaluation() {
@@ -51,9 +52,12 @@ mod symbol_tests {
         let result = eval.eval_str("(gensym \"temp\")").unwrap();
         assert!(format!("{:?}", result).starts_with("Symbol(Uninterned(\"temp"));
 
-        // Gensym with symbol prefix
-        let result = eval.eval_str("(gensym (quote foo))").unwrap();
-        assert!(format!("{:?}", result).starts_with("Symbol(Uninterned(\"foo"));
+        // Gensym with integer seed resets counter
+        let result = eval.eval_str("(gensym 42)").unwrap();
+        assert!(format!("{:?}", result).starts_with("Symbol(Uninterned(\"G42"));
+
+        // Symbol argument should be rejected per Common Lisp
+        assert!(eval.eval_str("(gensym (quote foo))").is_err());
     }
 
     #[test]
@@ -65,9 +69,14 @@ mod symbol_tests {
         let sym2 = eval.eval_str("(gensym)").unwrap();
 
         // They should not be equal
-        let _result = eval.eval_str(&format!("(= {} {})",
-            format!("{:?}", sym1).replace("Symbol(", "").replace(")", ""),
-            format!("{:?}", sym2).replace("Symbol(", "").replace(")", "")
+        let _result = eval.eval_str(&format!(
+            "(= {} {})",
+            format!("{:?}", sym1)
+                .replace("Symbol(", "")
+                .replace(")", ""),
+            format!("{:?}", sym2)
+                .replace("Symbol(", "")
+                .replace(")", "")
         ));
 
         // Since they're uninterned, they won't be equal even with same prefix
@@ -81,7 +90,8 @@ mod symbol_tests {
         let mut eval = Evaluator::new();
 
         // Set a property on a symbol
-        eval.eval_str("(put (quote foo) (quote color) (quote red))").unwrap();
+        eval.eval_str("(put (quote foo) (quote color) (quote red))")
+            .unwrap();
 
         // Get the property
         let result = eval.eval_str("(get (quote foo) (quote color))").unwrap();
@@ -93,11 +103,12 @@ mod symbol_tests {
 
         // Set multiple properties
         eval.eval_str("(put (quote foo) (quote size) 42)").unwrap();
-        eval.eval_str("(put (quote foo) (quote shape) (quote circle))").unwrap();
+        eval.eval_str("(put (quote foo) (quote shape) (quote circle))")
+            .unwrap();
 
         // Get multiple properties
         let result = eval.eval_str("(get (quote foo) (quote size))").unwrap();
-        assert_eq!(format!("{:?}", result), "Number(42.0)");
+        assert_eq!(result, Expr::Integer(42));
 
         let result = eval.eval_str("(get (quote foo) (quote shape))").unwrap();
         assert_eq!(format!("{:?}", result), "Symbol(Interned(\"circle\"))");
@@ -128,22 +139,30 @@ mod symbol_tests {
         let mut eval = Evaluator::new();
 
         // Keywords can be used in case statements
-        let result = eval.eval_str("
+        let result = eval
+            .eval_str(
+                "
             (case :foo
                 (:foo (quote matched-foo))
                 (:bar (quote matched-bar))
                 (else (quote no-match)))
-        ").unwrap();
+        ",
+            )
+            .unwrap();
         assert_eq!(format!("{:?}", result), "Symbol(Interned(\"matched-foo\"))");
 
         // Test with variable holding keyword
         eval.eval_str("(define key :bar)").unwrap();
-        let result = eval.eval_str("
+        let result = eval
+            .eval_str(
+                "
             (case key
                 (:foo (quote matched-foo))
                 (:bar (quote matched-bar))
                 (else (quote no-match)))
-        ").unwrap();
+        ",
+            )
+            .unwrap();
         assert_eq!(format!("{:?}", result), "Symbol(Interned(\"matched-bar\"))");
     }
 
@@ -153,11 +172,11 @@ mod symbol_tests {
 
         // Keywords with same name should be equal
         let result = eval.eval_str("(= :test :test)").unwrap();
-        assert_eq!(format!("{:?}", result), "Number(1.0)");
+        assert_eq!(result, Evaluator::bool_to_expr(true));
 
         // Different keywords should not be equal
         let result = eval.eval_str("(= :foo :bar)").unwrap();
-        assert_eq!(format!("{:?}", result), "Number(0.0)");
+        assert_eq!(result, Expr::List(vec![]));
     }
 
     #[test]
@@ -165,16 +184,24 @@ mod symbol_tests {
         let mut eval = Evaluator::new();
 
         // Create a list with symbols and set properties
-        eval.eval_str("(define symbols (list (quote a) (quote b) (quote c)))").unwrap();
+        eval.eval_str("(define symbols (list (quote a) (quote b) (quote c)))")
+            .unwrap();
         eval.eval_str("(put (quote a) (quote value) 1)").unwrap();
         eval.eval_str("(put (quote b) (quote value) 2)").unwrap();
         eval.eval_str("(put (quote c) (quote value) 3)").unwrap();
 
         // Map over symbols and get their values
-        let result = eval.eval_str("
+        let result = eval
+            .eval_str(
+                "
             (mapcar (lambda (sym) (get sym (quote value))) symbols)
-        ").unwrap();
-        assert_eq!(format!("{:?}", result), "List([Number(1.0), Number(2.0), Number(3.0)])");
+        ",
+            )
+            .unwrap();
+        assert_eq!(
+            format!("{:?}", result),
+            "List([Integer(1), Integer(2), Integer(3)])"
+        );
     }
 
     #[test]
@@ -182,12 +209,14 @@ mod symbol_tests {
         let mut eval = Evaluator::new();
 
         // Set a property
-        eval.eval_str("(put (quote test) (quote prop) (quote old))").unwrap();
+        eval.eval_str("(put (quote test) (quote prop) (quote old))")
+            .unwrap();
         let result = eval.eval_str("(get (quote test) (quote prop))").unwrap();
         assert_eq!(format!("{:?}", result), "Symbol(Interned(\"old\"))");
 
         // Overwrite the property
-        eval.eval_str("(put (quote test) (quote prop) (quote new))").unwrap();
+        eval.eval_str("(put (quote test) (quote prop) (quote new))")
+            .unwrap();
         let result = eval.eval_str("(get (quote test) (quote prop))").unwrap();
         assert_eq!(format!("{:?}", result), "Symbol(Interned(\"new\"))");
     }

@@ -6,40 +6,40 @@ fn test_mapcar() {
     let result = eval_to_list("(mapcar (lambda (x) (* x 2)) (list 1 2 3))");
     assert_eq!(
         result,
-        vec![Expr::Number(2.0), Expr::Number(4.0), Expr::Number(6.0)]
+        vec![Expr::Integer(2), Expr::Integer(4), Expr::Integer(6)]
     );
 
     // Test with multiple lists
     let result = eval_to_list("(mapcar + (list 1 2 3) (list 10 20 30))");
     assert_eq!(
         result,
-        vec![Expr::Number(11.0), Expr::Number(22.0), Expr::Number(33.0)]
+        vec![Expr::Integer(11), Expr::Integer(22), Expr::Integer(33)]
     );
 
     // Test with lists of different lengths (stops at shortest)
     let result = eval_to_list("(mapcar + (list 1 2) (list 10 20 30))");
-    assert_eq!(result, vec![Expr::Number(11.0), Expr::Number(22.0)]);
+    assert_eq!(result, vec![Expr::Integer(11), Expr::Integer(22)]);
 }
 
 #[test]
 fn test_filter() {
     let result = eval_to_list("(filter (lambda (x) (> x 2)) (list 1 2 3 4))");
-    assert_eq!(result, vec![Expr::Number(3.0), Expr::Number(4.0)]);
+    assert_eq!(result, vec![Expr::Integer(3), Expr::Integer(4)]);
 
     // We don't have mod function yet, so let's use a simpler test
     let result = eval_to_list("(filter (lambda (x) (> x 0)) (list -2 -1 0 1 2))");
-    assert_eq!(result, vec![Expr::Number(1.0), Expr::Number(2.0)]);
+    assert_eq!(result, vec![Expr::Integer(1), Expr::Integer(2)]);
 }
 
 #[test]
 fn test_remove() {
     let result = eval_to_list("(remove (lambda (x) (> x 2)) (list 1 2 3 4))");
-    assert_eq!(result, vec![Expr::Number(1.0), Expr::Number(2.0)]);
+    assert_eq!(result, vec![Expr::Integer(1), Expr::Integer(2)]);
 
     let result = eval_to_list("(remove (lambda (x) (< x 0)) (list -2 -1 0 1 2))");
     assert_eq!(
         result,
-        vec![Expr::Number(0.0), Expr::Number(1.0), Expr::Number(2.0)]
+        vec![Expr::Integer(0), Expr::Integer(1), Expr::Integer(2)]
     );
 }
 
@@ -120,10 +120,10 @@ fn test_complex_mapcar() {
     assert_eq!(
         result,
         Expr::List(vec![
-            Expr::Number(1.0),
-            Expr::Number(4.0),
-            Expr::Number(9.0),
-            Expr::Number(16.0)
+            Expr::Integer(1),
+            Expr::Integer(4),
+            Expr::Integer(9),
+            Expr::Integer(16)
         ])
     );
 }
@@ -136,7 +136,7 @@ fn test_nested_higher_order() {
     );
     assert_eq!(
         result,
-        vec![Expr::Number(6.0), Expr::Number(8.0), Expr::Number(10.0)]
+        vec![Expr::Integer(6), Expr::Integer(8), Expr::Integer(10)]
     );
 
     // Reduce the mapped result

@@ -8,7 +8,7 @@ fn test_eval_lambda_simple() {
         .eval_str("(define square (lambda (n) (* n n)))")
         .unwrap();
     let result = evaluator.eval_str("(square 5)").unwrap();
-    assert_eq!(result, Expr::Number(25.0));
+    assert_eq!(result, Expr::Integer(25));
 }
 
 #[test]
@@ -18,7 +18,7 @@ fn test_eval_lambda_multiple_params() {
         .eval_str("(define add (lambda (x y) (+ x y)))")
         .unwrap();
     let result = evaluator.eval_str("(add 3 7)").unwrap();
-    assert_eq!(result, Expr::Number(10.0));
+    assert_eq!(result, Expr::Integer(10));
 }
 
 #[test]
@@ -29,7 +29,7 @@ fn test_eval_lambda_closure() {
         .eval_str("(define add-x (lambda (y) (+ x y)))")
         .unwrap();
     let result = evaluator.eval_str("(add-x 5)").unwrap();
-    assert_eq!(result, Expr::Number(15.0));
+    assert_eq!(result, Expr::Integer(15));
 }
 
 #[test]
@@ -47,5 +47,5 @@ fn test_let_with_lambda() {
            (f 10))",
         )
         .unwrap();
-    assert_eq!(result, Expr::Number(20.0));
+    assert_eq!(result, Expr::Integer(20));
 }

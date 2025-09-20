@@ -1,5 +1,5 @@
-use crate::interpreter::*;
 use crate::interpreter::types::SymbolData;
+use crate::interpreter::*;
 
 #[test]
 fn test_repl_integration() {
@@ -7,18 +7,18 @@ fn test_repl_integration() {
 
     // Test basic arithmetic
     let result = repl.evaluate("(+ 1 2 3)").unwrap();
-    assert_eq!(result, Expr::Number(6.0));
+    assert_eq!(result, Expr::Integer(6));
 
     // Test define and use
     repl.evaluate("(define x 10)").unwrap();
     let result = repl.evaluate("(* x 2)").unwrap();
-    assert_eq!(result, Expr::Number(20.0));
+    assert_eq!(result, Expr::Integer(20));
 
     // Test lambda
     repl.evaluate("(define square (lambda (n) (* n n)))")
         .unwrap();
     let result = repl.evaluate("(square 7)").unwrap();
-    assert_eq!(result, Expr::Number(49.0));
+    assert_eq!(result, Expr::Integer(49));
 }
 
 #[test]
@@ -26,9 +26,9 @@ fn test_format_expr() {
     let repl = Repl::new();
 
     // Test number formatting
-    assert_eq!(repl.format_expr(&Expr::Number(42.0)), "42");
-    assert_eq!(repl.format_expr(&Expr::Number(3.14)), "3.14");
-    assert_eq!(repl.format_expr(&Expr::Number(-17.0)), "-17");
+    assert_eq!(repl.format_expr(&Expr::Integer(42)), "42");
+    assert_eq!(repl.format_expr(&Expr::Float(3.14)), "3.14");
+    assert_eq!(repl.format_expr(&Expr::Integer(-17)), "-17");
 
     // Test string formatting
     assert_eq!(
@@ -37,13 +37,16 @@ fn test_format_expr() {
     );
 
     // Test symbol formatting
-    assert_eq!(repl.format_expr(&Expr::Symbol(SymbolData::Interned("x".to_string()))), "x");
+    assert_eq!(
+        repl.format_expr(&Expr::Symbol(SymbolData::Interned("x".to_string()))),
+        "x"
+    );
 
     // Test list formatting
     let list = Expr::List(vec![
         Expr::Symbol(SymbolData::Interned("+".to_string())),
-        Expr::Number(1.0),
-        Expr::Number(2.0),
+        Expr::Integer(1),
+        Expr::Integer(2),
     ]);
     assert_eq!(repl.format_expr(&list), "(+ 1 2)");
 }
