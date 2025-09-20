@@ -1,4 +1,5 @@
 use crate::interpreter::evaluator::Evaluator;
+use raylib::core::text::RaylibFont;
 use raylib::prelude::*;
 use std::collections::VecDeque;
 use std::path::Path;
@@ -24,7 +25,11 @@ struct ReplLine {
     is_error: bool,
 }
 
-fn load_monospace_font(rl: &mut RaylibHandle, thread: &RaylibThread, base_size: i32) -> Font {
+fn load_monospace_font(
+    rl: &mut RaylibHandle,
+    thread: &RaylibThread,
+    base_size: i32,
+) -> Option<Font> {
     const FONT_PATH_CANDIDATES: [&str; 5] = [
         "/System/Applications/Utilities/Terminal.app/Contents/Resources/Fonts/SF-Mono-Regular.otf",
         "/System/Library/Fonts/SF-Mono-Regular.otf",
@@ -36,12 +41,12 @@ fn load_monospace_font(rl: &mut RaylibHandle, thread: &RaylibThread, base_size: 
     for path in FONT_PATH_CANDIDATES.iter() {
         if Path::new(path).exists() {
             if let Ok(font) = rl.load_font_ex(thread, path, base_size, None) {
-                return font;
+                return Some(font);
             }
         }
     }
 
-    rl.load_font_default()
+    None
 }
 
 pub fn run_ui() {
@@ -80,7 +85,8 @@ pub fn run_ui() {
         is_error: false,
     });
 
-    let font = load_monospace_font(&mut rl, &thread, FONT_SIZE);
+    let custom_font = load_monospace_font(&mut rl, &thread, FONT_SIZE);
+    let fallback_font = rl.get_font_default();
 
     rl.set_target_fps(60);
 
@@ -164,18 +170,30 @@ pub fn run_ui() {
 
         // Draw
         let mut d = rl.begin_drawing(&thread);
+        let font_ref = custom_font.as_ref();
         d.clear_background(BACKGROUND_COLOR);
 
         // Draw title bar
         d.draw_rectangle(0, 0, d.get_screen_width(), 35, Color::new(35, 35, 55, 255));
-        d.draw_text_ex(
-            &font,
-            "Zeus LISP - Graphical REPL",
-            Vector2::new(15.0, 8.0),
-            TITLE_FONT_SIZE,
-            FONT_SPACING,
-            Color::WHITE,
-        );
+        if let Some(font) = font_ref {
+            d.draw_text_ex(
+                font,
+                "Zeus LISP - Graphical REPL",
+                Vector2::new(15.0, 8.0),
+                TITLE_FONT_SIZE,
+                FONT_SPACING,
+                Color::WHITE,
+            );
+        } else {
+            d.draw_text_ex(
+                &fallback_font,
+                "Zeus LISP - Graphical REPL",
+                Vector2::new(15.0, 8.0),
+                TITLE_FONT_SIZE,
+                FONT_SPACING,
+                Color::WHITE,
+            );
+        }
 
         // Draw history area
         let screen_width = d.get_screen_width();
@@ -197,14 +215,25 @@ pub fn run_ui() {
                         OUTPUT_COLOR
                     };
 
-                    scissor.draw_text_ex(
-                        &font,
-                        &line.text,
-                        Vector2::new(PADDING as f32, y as f32),
-                        FONT_SIZE as f32,
-                        FONT_SPACING,
-                        color,
-                    );
+                    if let Some(font) = font_ref {
+                        scissor.draw_text_ex(
+                            font,
+                            &line.text,
+                            Vector2::new(PADDING as f32, y as f32),
+                            FONT_SIZE as f32,
+                            FONT_SPACING,
+                            color,
+                        );
+                    } else {
+                        scissor.draw_text_ex(
+                            &fallback_font,
+                            &line.text,
+                            Vector2::new(PADDING as f32, y as f32),
+                            FONT_SIZE as f32,
+                            FONT_SPACING,
+                            color,
+                        );
+                    }
                 }
                 y += LINE_HEIGHT;
             }
@@ -213,42 +242,79 @@ pub fn run_ui() {
         // Draw input box
         let input_y = screen_height - 65;
         d.draw_rectangle(0, input_y - 10, screen_width, 75, INPUT_BOX_COLOR);
-        d.draw_text_ex(
-            &font,
-            "Input:",
-            Vector2::new(PADDING as f32, input_y as f32),
-            FONT_SIZE as f32,
-            FONT_SPACING,
-            Color::GRAY,
-        );
+        if let Some(font) = font_ref {
+            d.draw_text_ex(
+                font,
+                "Input:",
+                Vector2::new(PADDING as f32, input_y as f32),
+                FONT_SIZE as f32,
+                FONT_SPACING,
+                Color::GRAY,
+            );
+        } else {
+            d.draw_text_ex(
+                &fallback_font,
+                "Input:",
+                Vector2::new(PADDING as f32, input_y as f32),
+                FONT_SIZE as f32,
+                FONT_SPACING,
+                Color::GRAY,
+            );
+        }
 
         let prompt = format!("> {}", current_input);
         let prompt_position = Vector2::new(PADDING as f32, (input_y + 22) as f32);
-        d.draw_text_ex(
-            &font,
-            &prompt,
-            prompt_position,
-            FONT_SIZE as f32,
-            FONT_SPACING,
-            INPUT_COLOR,
-        );
+        if let Some(font) = font_ref {
+            d.draw_text_ex(
+                font,
+                &prompt,
+                prompt_position,
+                FONT_SIZE as f32,
+                FONT_SPACING,
+                INPUT_COLOR,
+            );
+        } else {
+            d.draw_text_ex(
+                &fallback_font,
+                &prompt,
+                prompt_position,
+                FONT_SIZE as f32,
+                FONT_SPACING,
+                INPUT_COLOR,
+            );
+        }
 
         // Draw cursor
         if cursor_visible {
-            let prompt_metrics = d.measure_text_ex(&font, &prompt, FONT_SIZE as f32, FONT_SPACING);
+            let prompt_metrics = if let Some(font) = font_ref {
+                font.measure_text(&prompt, FONT_SIZE as f32, FONT_SPACING)
+            } else {
+                fallback_font.measure_text(&prompt, FONT_SIZE as f32, FONT_SPACING)
+            };
             let cursor_x = (PADDING as f32 + prompt_metrics.x).round() as i32;
             d.draw_rectangle(cursor_x, input_y + 22, 2, FONT_SIZE, INPUT_COLOR);
         }
 
         // Draw help text at bottom
-        d.draw_text_ex(
-            &font,
-            "ESC: Exit | Enter: Evaluate | Mouse Wheel: Scroll",
-            Vector2::new(PADDING as f32, (screen_height - 20) as f32),
-            HELP_FONT_SIZE,
-            FONT_SPACING,
-            Color::GRAY,
-        );
+        if let Some(font) = font_ref {
+            d.draw_text_ex(
+                font,
+                "ESC: Exit | Enter: Evaluate | Mouse Wheel: Scroll",
+                Vector2::new(PADDING as f32, (screen_height - 20) as f32),
+                HELP_FONT_SIZE,
+                FONT_SPACING,
+                Color::GRAY,
+            );
+        } else {
+            d.draw_text_ex(
+                &fallback_font,
+                "ESC: Exit | Enter: Evaluate | Mouse Wheel: Scroll",
+                Vector2::new(PADDING as f32, (screen_height - 20) as f32),
+                HELP_FONT_SIZE,
+                FONT_SPACING,
+                Color::GRAY,
+            );
+        }
     }
 }
 
