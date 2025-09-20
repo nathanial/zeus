@@ -51,6 +51,7 @@ impl Evaluator {
                 match first {
                     Expr::Symbol(name) => match name.as_str() {
                         "define" => self.eval_define(list),
+                        "defun" => self.eval_defun(list),
                         "if" => self.eval_if(list),
                         "quote" => self.eval_quote(list),
                         "lambda" => self.eval_lambda(list),
@@ -83,6 +84,57 @@ impl Evaluator {
         } else {
             Err("First argument to define must be a symbol".to_string())
         }
+    }
+
+    fn eval_defun(&mut self, list: &[Expr]) -> Result<Expr, String> {
+        if list.len() < 4 {
+            return Err("defun requires at least 3 arguments: name, params, and body".to_string());
+        }
+
+        let name = match &list[1] {
+            Expr::Symbol(s) => s.clone(),
+            _ => return Err("First argument to defun must be a symbol".to_string()),
+        };
+
+        let params = match &list[2] {
+            Expr::List(params) => {
+                // Verify all params are symbols
+                for param in params {
+                    if !matches!(param, Expr::Symbol(_)) {
+                        return Err("All parameters must be symbols".to_string());
+                    }
+                }
+                list[2].clone()
+            }
+            _ => return Err("Second argument to defun must be a parameter list".to_string()),
+        };
+
+        // Build the lambda expression: (lambda params body...)
+        let mut lambda_expr = vec![
+            Expr::Symbol("lambda".to_string()),
+            params,
+        ];
+
+        // If there are multiple body expressions, wrap them in progn
+        if list.len() == 4 {
+            // Single body expression
+            lambda_expr.push(list[3].clone());
+        } else {
+            // Multiple body expressions - wrap in progn
+            let mut progn_expr = vec![Expr::Symbol("progn".to_string())];
+            for body_expr in &list[3..] {
+                progn_expr.push(body_expr.clone());
+            }
+            lambda_expr.push(Expr::List(progn_expr));
+        }
+
+        let lambda = Expr::List(lambda_expr);
+
+        // Store the lambda in the environment
+        self.environment.set(name.clone(), lambda.clone());
+
+        // Return the function name as a symbol
+        Ok(Expr::Symbol(name))
     }
 
     fn eval_if(&mut self, list: &[Expr]) -> Result<Expr, String> {
