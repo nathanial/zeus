@@ -1,7 +1,7 @@
 pub mod interpreter;
 pub mod tests;
 
-use interpreter::Repl;
+use crate::interpreter::repl::Repl;
 
 fn main() {
     println!("Zeus LISP v0.1.0");
