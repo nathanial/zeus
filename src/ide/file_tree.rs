@@ -44,9 +44,7 @@ impl FileNode {
 
         if let Ok(entries) = fs::read_dir(&self.path) {
             let mut children: Vec<FileNode> = entries
-                .filter_map(|entry| {
-                    entry.ok().and_then(|e| FileNode::from_path(&e.path()))
-                })
+                .filter_map(|entry| entry.ok().and_then(|e| FileNode::from_path(&e.path())))
                 .filter(|node| {
                     // Filter out hidden files and common build directories
                     !node.name.starts_with('.')
@@ -56,12 +54,10 @@ impl FileNode {
                 .collect();
 
             // Sort directories first, then files, alphabetically within each group
-            children.sort_by(|a, b| {
-                match (a.is_directory, b.is_directory) {
-                    (true, false) => std::cmp::Ordering::Less,
-                    (false, true) => std::cmp::Ordering::Greater,
-                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-                }
+            children.sort_by(|a, b| match (a.is_directory, b.is_directory) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
             });
 
             self.children = children;
@@ -95,7 +91,8 @@ impl FileTreePane {
         let root_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         let mut root_node = FileNode {
             path: root_path.clone(),
-            name: root_path.file_name()
+            name: root_path
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("Project")
                 .to_string(),
@@ -159,7 +156,18 @@ impl FileTreePane {
             *y += line_height;
             if node.is_expanded {
                 for child in &node.children {
-                    self.draw_node(child, d, x, y, indent + 1, theme, fonts, bounds, clicked_path, toggle_path);
+                    self.draw_node(
+                        child,
+                        d,
+                        x,
+                        y,
+                        indent + 1,
+                        theme,
+                        fonts,
+                        bounds,
+                        clicked_path,
+                        toggle_path,
+                    );
                 }
             }
             return;
@@ -236,13 +244,7 @@ impl FileTreePane {
             (icon, theme.text)
         };
 
-        fonts.draw_text(
-            d,
-            icon,
-            Vector2::new(x_pos, *y),
-            14.0,
-            color,
-        );
+        fonts.draw_text(d, icon, Vector2::new(x_pos, *y), 14.0, color);
 
         // Draw name
         let name_color = if node.is_directory {
@@ -264,7 +266,18 @@ impl FileTreePane {
         // Draw children if expanded
         if node.is_expanded {
             for child in &node.children {
-                self.draw_node(child, d, x, y, indent + 1, theme, fonts, bounds, clicked_path, toggle_path);
+                self.draw_node(
+                    child,
+                    d,
+                    x,
+                    y,
+                    indent + 1,
+                    theme,
+                    fonts,
+                    bounds,
+                    clicked_path,
+                    toggle_path,
+                );
             }
         }
     }

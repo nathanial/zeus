@@ -162,7 +162,8 @@ impl IdeApp {
                 if let Some(path) = file_tree.take_file_to_open() {
                     // Load the file into the editor
                     if let Some(editor_pane) = self.state.panes.get_mut("editor") {
-                        if let Some(editor) = editor_pane.as_any_mut().downcast_mut::<EditorPane>() {
+                        if let Some(editor) = editor_pane.as_any_mut().downcast_mut::<EditorPane>()
+                        {
                             editor.load_file_from_path(path);
                             // Focus the editor after loading a file
                             self.state.focus_pane("editor".to_string());

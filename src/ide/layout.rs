@@ -42,11 +42,11 @@ impl LayoutManager {
         Self {
             root: LayoutNode::Split {
                 direction: SplitDirection::Horizontal,
-                ratio: 0.2,  // File tree takes 20% of width
+                ratio: 0.2, // File tree takes 20% of width
                 first: Box::new(LayoutNode::Leaf("file_tree".to_string())),
                 second: Box::new(LayoutNode::Split {
                     direction: SplitDirection::Horizontal,
-                    ratio: 0.625,  // Adjusted to maintain proportions
+                    ratio: 0.625, // Adjusted to maintain proportions
                     first: Box::new(LayoutNode::Split {
                         direction: SplitDirection::Vertical,
                         ratio: 0.7,

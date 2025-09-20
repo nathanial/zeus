@@ -17,6 +17,44 @@ const V_PADDING: f32 = 5.0;
 const CARET_WIDTH: i32 = 2;
 const KEY_REPEAT_INITIAL_DELAY: f32 = 0.35;
 const KEY_REPEAT_INTERVAL: f32 = 0.05;
+const SCROLLBAR_THICKNESS: f32 = 12.0;
+const SCROLLBAR_MIN_THUMB: f32 = 20.0;
+const SCROLL_WHEEL_LINES: f32 = 3.0;
+
+#[derive(Clone, Copy)]
+struct ScrollbarMetrics {
+    track: Rectangle,
+    thumb: Rectangle,
+    view_length: f32,
+    content_length: f32,
+}
+
+#[derive(Clone, Copy)]
+struct EditorViewLayout {
+    text_rect: Rectangle,
+    status_rect: Option<Rectangle>,
+    vertical: Option<ScrollbarMetrics>,
+    horizontal: Option<ScrollbarMetrics>,
+    max_scroll_x: f32,
+    max_scroll_y: f32,
+    char_width: f32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ScrollOrientation {
+    Vertical,
+    Horizontal,
+}
+
+#[derive(Clone, Copy)]
+struct ScrollDragState {
+    orientation: ScrollOrientation,
+    grab_offset: f32,
+    track: Rectangle,
+    view_length: f32,
+    content_length: f32,
+    thumb_size: f32,
+}
 
 #[derive(Clone, PartialEq)]
 struct EditorSnapshot {
@@ -60,6 +98,11 @@ pub struct EditorPane {
     preferred_column: Option<usize>,
     pending_command: Option<PendingCommand>,
     key_repeat_state: Option<KeyRepeatState>,
+    scroll_x: f32,
+    scroll_y: f32,
+    auto_scroll_to_cursor: bool,
+    last_layout: Option<EditorViewLayout>,
+    scroll_drag_state: Option<ScrollDragState>,
 }
 
 impl EditorPane {
@@ -86,6 +129,11 @@ impl EditorPane {
             preferred_column: None,
             pending_command: None,
             key_repeat_state: None,
+            scroll_x: 0.0,
+            scroll_y: 0.0,
+            auto_scroll_to_cursor: true,
+            last_layout: None,
+            scroll_drag_state: None,
         };
         pane.capture_initial_state();
         pane
@@ -123,6 +171,7 @@ impl EditorPane {
         self.selection_anchor = self.selection.map(|(start, _)| start);
         self.preferred_column = None;
         self.mark_dirty();
+        self.request_scroll_to_cursor();
     }
 
     fn push_undo_state(&mut self) {
@@ -231,6 +280,7 @@ impl EditorPane {
                 self.content.replace_range(start..end, "");
                 self.cursor_position = start;
                 self.clear_selection();
+                self.request_scroll_to_cursor();
                 return Some(removed);
             }
         }
@@ -328,6 +378,11 @@ impl EditorPane {
             self.clear_selection();
         }
         self.cursor_position = position;
+        self.request_scroll_to_cursor();
+    }
+
+    fn request_scroll_to_cursor(&mut self) {
+        self.auto_scroll_to_cursor = true;
     }
 
     fn move_cursor_left(&mut self, selecting: bool) {
@@ -423,6 +478,7 @@ impl EditorPane {
         self.clear_selection();
         self.preferred_column = None;
         self.mark_dirty();
+        self.request_scroll_to_cursor();
     }
 
     fn insert_text(&mut self, text: &str) {
@@ -436,6 +492,7 @@ impl EditorPane {
         self.clear_selection();
         self.preferred_column = None;
         self.mark_dirty();
+        self.request_scroll_to_cursor();
     }
 
     fn insert_newline(&mut self) {
@@ -451,6 +508,7 @@ impl EditorPane {
         self.clear_selection();
         self.preferred_column = Some(self.column_at(self.cursor_position));
         self.mark_dirty();
+        self.request_scroll_to_cursor();
     }
 
     fn indent_unit(&self) -> String {
@@ -559,6 +617,7 @@ impl EditorPane {
 
         self.preferred_column = None;
         self.mark_dirty();
+        self.request_scroll_to_cursor();
     }
 
     fn outdent_selection_or_line(&mut self) {
@@ -632,6 +691,7 @@ impl EditorPane {
 
         self.preferred_column = None;
         self.mark_dirty();
+        self.request_scroll_to_cursor();
     }
 
     fn outdent_amount(&self, idx: usize) -> usize {
@@ -692,6 +752,7 @@ impl EditorPane {
         self.cursor_position = prev;
         self.preferred_column = None;
         self.mark_dirty();
+        self.request_scroll_to_cursor();
     }
 
     fn delete_forward(&mut self) {
@@ -709,6 +770,7 @@ impl EditorPane {
         self.content.drain(self.cursor_position..next);
         self.preferred_column = None;
         self.mark_dirty();
+        self.request_scroll_to_cursor();
     }
 
     fn copy_selection(&mut self, rl: &mut RaylibHandle) {
@@ -736,6 +798,7 @@ impl EditorPane {
                 self.clear_selection();
                 self.preferred_column = None;
                 self.mark_dirty();
+                self.request_scroll_to_cursor();
             }
         }
     }
@@ -902,6 +965,9 @@ impl EditorPane {
                 self.content = contents;
                 self.cursor_position = self.content.len();
                 self.clear_selection();
+                self.scroll_x = 0.0;
+                self.scroll_y = 0.0;
+                self.request_scroll_to_cursor();
                 self.current_file = Some(path.clone());
                 self.saved_content = Some(self.content.clone());
                 self.is_dirty = false;
@@ -1007,16 +1073,17 @@ impl EditorPane {
         }
     }
 
-    fn draw_selection(
+    fn draw_selection<T: RaylibDraw>(
         &self,
-        d: &mut RaylibDrawHandle,
+        target: &mut T,
         fonts: &IdeFonts,
         theme: &Theme,
         line_text: &str,
         line_start: usize,
         line_y: f32,
         selection: (usize, usize),
-        bounds: Rectangle,
+        text_origin_x: f32,
+        scroll_x: f32,
     ) {
         let (sel_start, sel_end) = selection;
         let line_end = line_start + line_text.len();
@@ -1042,12 +1109,280 @@ impl EditorPane {
         }
 
         let rect = Rectangle {
-            x: bounds.x + H_PADDING + prefix_width,
+            x: text_origin_x - scroll_x + prefix_width,
             y: line_y,
             width: highlight_width,
             height: LINE_HEIGHT,
         };
-        d.draw_rectangle_rec(rect, theme.selection);
+        target.draw_rectangle_rec(rect, theme.selection);
+    }
+
+    fn compute_layout(
+        &mut self,
+        bounds: Rectangle,
+        total_content_height: f32,
+        max_line_width: f32,
+        char_width: f32,
+    ) -> EditorViewLayout {
+        let status_height = if self.show_result {
+            LINE_HEIGHT + V_PADDING
+        } else {
+            0.0
+        };
+
+        let base_width = (bounds.width - H_PADDING * 2.0).max(0.0);
+        let base_height = (bounds.height - TITLE_HEIGHT - V_PADDING * 2.0 - status_height).max(0.0);
+
+        let mut need_vertical = total_content_height > base_height + 0.5;
+        let mut need_horizontal = max_line_width > base_width + 0.5;
+
+        let mut text_width = base_width
+            - if need_vertical {
+                SCROLLBAR_THICKNESS
+            } else {
+                0.0
+            };
+        let mut text_height = base_height
+            - if need_horizontal {
+                SCROLLBAR_THICKNESS
+            } else {
+                0.0
+            };
+
+        if need_horizontal && !need_vertical && total_content_height > text_height + 0.5 {
+            need_vertical = true;
+            text_width = (text_width - SCROLLBAR_THICKNESS).max(0.0);
+        }
+
+        if need_vertical && !need_horizontal && max_line_width > text_width + 0.5 {
+            need_horizontal = true;
+            text_height = (text_height - SCROLLBAR_THICKNESS).max(0.0);
+        }
+
+        if need_horizontal && total_content_height > text_height + 0.5 {
+            if !need_vertical {
+                need_vertical = true;
+                text_width = (text_width - SCROLLBAR_THICKNESS).max(0.0);
+            }
+        }
+
+        if need_vertical && max_line_width > text_width + 0.5 {
+            if !need_horizontal {
+                need_horizontal = true;
+                text_height = (text_height - SCROLLBAR_THICKNESS).max(0.0);
+            }
+        }
+
+        text_width = text_width.max(0.0);
+        text_height = text_height.max(0.0);
+
+        let text_rect = Rectangle {
+            x: bounds.x + H_PADDING,
+            y: bounds.y + TITLE_HEIGHT + V_PADDING,
+            width: text_width,
+            height: text_height,
+        };
+
+        let status_rect = if self.show_result {
+            Some(Rectangle {
+                x: bounds.x,
+                y: bounds.y + bounds.height - status_height,
+                width: bounds.width,
+                height: status_height,
+            })
+        } else {
+            None
+        };
+
+        let vertical_track = if need_vertical {
+            Some(Rectangle {
+                x: text_rect.x + text_rect.width,
+                y: text_rect.y,
+                width: SCROLLBAR_THICKNESS,
+                height: text_rect.height,
+            })
+        } else {
+            None
+        };
+
+        let horizontal_track = if need_horizontal {
+            Some(Rectangle {
+                x: text_rect.x,
+                y: text_rect.y + text_rect.height,
+                width: text_rect.width,
+                height: SCROLLBAR_THICKNESS,
+            })
+        } else {
+            None
+        };
+
+        let mut max_scroll_y = if text_rect.height <= 0.0 {
+            0.0
+        } else {
+            (total_content_height - text_rect.height).max(0.0)
+        };
+
+        let mut max_scroll_x = if text_rect.width <= 0.0 {
+            0.0
+        } else {
+            (max_line_width - text_rect.width).max(0.0)
+        };
+
+        if max_scroll_y <= f32::EPSILON {
+            self.scroll_y = 0.0;
+            max_scroll_y = 0.0;
+        } else {
+            self.scroll_y = self.scroll_y.clamp(0.0, max_scroll_y);
+        }
+
+        if max_scroll_x <= f32::EPSILON {
+            self.scroll_x = 0.0;
+            max_scroll_x = 0.0;
+        } else {
+            self.scroll_x = self.scroll_x.clamp(0.0, max_scroll_x);
+        }
+
+        let vertical = vertical_track.map(|track| {
+            let view_length = text_rect.height.max(0.0);
+            let content_length = total_content_height.max(view_length);
+            let max_scroll = max_scroll_y.max(0.0);
+            let mut thumb_height = if content_length <= 0.0 || max_scroll <= f32::EPSILON {
+                track.height
+            } else {
+                (view_length / content_length) * track.height
+            };
+            thumb_height = thumb_height.clamp(SCROLLBAR_MIN_THUMB.min(track.height), track.height);
+            let thumb_travel = (track.height - thumb_height).max(0.0);
+            let scroll_ratio = if max_scroll <= f32::EPSILON {
+                0.0
+            } else {
+                (self.scroll_y / max_scroll).clamp(0.0, 1.0)
+            };
+            let thumb_y = track.y + scroll_ratio * thumb_travel;
+            ScrollbarMetrics {
+                track,
+                thumb: Rectangle {
+                    x: track.x,
+                    y: thumb_y,
+                    width: track.width,
+                    height: thumb_height,
+                },
+                view_length,
+                content_length,
+            }
+        });
+
+        let horizontal = horizontal_track.map(|track| {
+            let view_length = text_rect.width.max(0.0);
+            let content_length = max_line_width.max(view_length);
+            let max_scroll = max_scroll_x.max(0.0);
+            let mut thumb_width = if content_length <= 0.0 || max_scroll <= f32::EPSILON {
+                track.width
+            } else {
+                (view_length / content_length) * track.width
+            };
+            thumb_width = thumb_width.clamp(SCROLLBAR_MIN_THUMB.min(track.width), track.width);
+            let thumb_travel = (track.width - thumb_width).max(0.0);
+            let scroll_ratio = if max_scroll <= f32::EPSILON {
+                0.0
+            } else {
+                (self.scroll_x / max_scroll).clamp(0.0, 1.0)
+            };
+            let thumb_x = track.x + scroll_ratio * thumb_travel;
+            ScrollbarMetrics {
+                track,
+                thumb: Rectangle {
+                    x: thumb_x,
+                    y: track.y,
+                    width: thumb_width,
+                    height: track.height,
+                },
+                view_length,
+                content_length,
+            }
+        });
+
+        EditorViewLayout {
+            text_rect,
+            status_rect,
+            vertical,
+            horizontal,
+            max_scroll_x,
+            max_scroll_y,
+            char_width,
+        }
+    }
+
+    fn ensure_cursor_visible(&mut self, layout: &EditorViewLayout, fonts: &IdeFonts) {
+        if layout.text_rect.height <= 0.0 {
+            self.scroll_y = 0.0;
+        } else {
+            let cursor_line_start = self.line_start(self.cursor_position);
+            let cursor_line_index = self.content[..cursor_line_start]
+                .chars()
+                .filter(|c| *c == '\n')
+                .count();
+            let cursor_y = cursor_line_index as f32 * LINE_HEIGHT;
+
+            if cursor_y < self.scroll_y {
+                self.scroll_y = cursor_y;
+            } else if cursor_y + LINE_HEIGHT > self.scroll_y + layout.text_rect.height {
+                self.scroll_y = cursor_y + LINE_HEIGHT - layout.text_rect.height;
+            }
+
+            if layout.max_scroll_y <= f32::EPSILON {
+                self.scroll_y = 0.0;
+            } else {
+                self.scroll_y = self.scroll_y.clamp(0.0, layout.max_scroll_y);
+            }
+        }
+
+        if layout.text_rect.width <= 0.0 {
+            self.scroll_x = 0.0;
+        } else {
+            let cursor_line_start = self.line_start(self.cursor_position);
+            let prefix = &self.content[cursor_line_start..self.cursor_position];
+            let cursor_x = fonts.measure_text(prefix, CONTENT_FONT_SIZE).x;
+
+            if cursor_x < self.scroll_x {
+                self.scroll_x = cursor_x;
+            } else if cursor_x + CARET_WIDTH as f32 > self.scroll_x + layout.text_rect.width {
+                self.scroll_x = cursor_x + CARET_WIDTH as f32 - layout.text_rect.width;
+            }
+
+            if layout.max_scroll_x <= f32::EPSILON {
+                self.scroll_x = 0.0;
+            } else {
+                self.scroll_x = self.scroll_x.clamp(0.0, layout.max_scroll_x);
+            }
+        }
+    }
+
+    fn sync_drag_with_layout(&mut self, layout: &EditorViewLayout) {
+        if let Some(state) = self.scroll_drag_state.as_mut() {
+            match state.orientation {
+                ScrollOrientation::Vertical => {
+                    if let Some(metrics) = layout.vertical {
+                        state.track = metrics.track;
+                        state.view_length = metrics.view_length;
+                        state.content_length = metrics.content_length;
+                        state.thumb_size = metrics.thumb.height;
+                    } else {
+                        self.scroll_drag_state = None;
+                    }
+                }
+                ScrollOrientation::Horizontal => {
+                    if let Some(metrics) = layout.horizontal {
+                        state.track = metrics.track;
+                        state.view_length = metrics.view_length;
+                        state.content_length = metrics.content_length;
+                        state.thumb_size = metrics.thumb.width;
+                    } else {
+                        self.scroll_drag_state = None;
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1090,73 +1425,140 @@ impl Pane for EditorPane {
             16.0,
             theme.text,
         );
+        let char_width = fonts.measure_text("M", CONTENT_FONT_SIZE).x.max(1.0);
+        let mut line_count = 0usize;
+        let mut max_line_width = 0.0f32;
+        for line in self.content.split('\n') {
+            line_count += 1;
+            let width = fonts.measure_text(line, CONTENT_FONT_SIZE).x;
+            if width > max_line_width {
+                max_line_width = width;
+            }
+        }
+        if line_count == 0 {
+            line_count = 1;
+        }
+        let total_content_height = line_count as f32 * LINE_HEIGHT;
 
-        let content_top = bounds.y + TITLE_HEIGHT + V_PADDING;
-        let available_height = bounds.height - TITLE_HEIGHT - V_PADDING * 2.0;
-        let mut line_y = content_top;
+        let mut layout =
+            self.compute_layout(bounds, total_content_height, max_line_width, char_width);
+
+        if self.auto_scroll_to_cursor {
+            self.ensure_cursor_visible(&layout, fonts);
+            self.auto_scroll_to_cursor = false;
+            layout = self.compute_layout(bounds, total_content_height, max_line_width, char_width);
+        }
+
+        self.sync_drag_with_layout(&layout);
+
         let selection = self.selection_range();
 
-        let mut line_start_idx = 0usize;
-        let lines: Vec<&str> = self.content.split('\n').collect();
+        if layout.text_rect.width > 0.5 && layout.text_rect.height > 0.5 {
+            let mut scissor = d.begin_scissor_mode(
+                layout.text_rect.x.floor() as i32,
+                layout.text_rect.y.floor() as i32,
+                layout.text_rect.width.ceil().max(1.0) as i32,
+                layout.text_rect.height.ceil().max(1.0) as i32,
+            );
 
-        for line in lines.iter() {
-            if line_y + LINE_HEIGHT > bounds.y && line_y < bounds.y + bounds.height - LINE_HEIGHT {
+            let first_visible_line = (self.scroll_y / LINE_HEIGHT).floor().max(0.0) as usize;
+            let offset_within_line = self.scroll_y - first_visible_line as f32 * LINE_HEIGHT;
+            let mut line_start_idx = 0usize;
+            for line in self.content.split('\n').take(first_visible_line) {
+                line_start_idx += line.len() + 1;
+            }
+
+            let mut line_y = layout.text_rect.y - offset_within_line;
+            let text_origin_x = layout.text_rect.x;
+            let visible_bottom = layout.text_rect.y + layout.text_rect.height;
+
+            for line in self.content.split('\n').skip(first_visible_line) {
+                if line_y > visible_bottom {
+                    break;
+                }
                 if let Some(sel) = selection {
-                    self.draw_selection(d, fonts, theme, line, line_start_idx, line_y, sel, bounds);
+                    self.draw_selection(
+                        &mut scissor,
+                        fonts,
+                        theme,
+                        line,
+                        line_start_idx,
+                        line_y,
+                        sel,
+                        text_origin_x,
+                        self.scroll_x,
+                    );
                 }
                 fonts.draw_text(
-                    d,
+                    &mut scissor,
                     line,
-                    Vector2::new(bounds.x + H_PADDING, line_y),
+                    Vector2::new(text_origin_x - self.scroll_x, line_y),
                     CONTENT_FONT_SIZE,
                     theme.text,
                 );
+
+                line_y += LINE_HEIGHT;
+                line_start_idx += line.len() + 1;
             }
-            line_y += LINE_HEIGHT;
-            line_start_idx += line.len() + 1;
-            if line_y > content_top + available_height {
-                break;
+
+            if self.has_focus {
+                let cursor_line_start = self.line_start(self.cursor_position);
+                let cursor_line_index = self.content[..cursor_line_start]
+                    .chars()
+                    .filter(|c| *c == '\n')
+                    .count();
+                let prefix = &self.content[cursor_line_start..self.cursor_position];
+                let prefix_width = fonts.measure_text(prefix, CONTENT_FONT_SIZE).x;
+                let cursor_x = text_origin_x - self.scroll_x + prefix_width;
+                let cursor_y =
+                    layout.text_rect.y + cursor_line_index as f32 * LINE_HEIGHT - self.scroll_y;
+
+                if cursor_y + LINE_HEIGHT >= layout.text_rect.y
+                    && cursor_y <= layout.text_rect.y + layout.text_rect.height
+                {
+                    scissor.draw_rectangle(
+                        cursor_x.round() as i32,
+                        cursor_y.round() as i32,
+                        CARET_WIDTH,
+                        CONTENT_FONT_SIZE.round().max(1.0) as i32,
+                        theme.cursor,
+                    );
+                }
+            }
+
+            drop(scissor);
+        }
+
+        let track_color = Color::new(theme.border.r, theme.border.g, theme.border.b, 160);
+        let thumb_color = Color::new(theme.text_dim.r, theme.text_dim.g, theme.text_dim.b, 220);
+
+        if let Some(vbar) = layout.vertical {
+            d.draw_rectangle_rec(vbar.track, track_color);
+            d.draw_rectangle_rec(vbar.thumb, thumb_color);
+        }
+
+        if let Some(hbar) = layout.horizontal {
+            d.draw_rectangle_rec(hbar.track, track_color);
+            d.draw_rectangle_rec(hbar.thumb, thumb_color);
+            if let Some(vbar) = layout.vertical {
+                let corner = Rectangle {
+                    x: vbar.track.x,
+                    y: hbar.track.y,
+                    width: vbar.track.width,
+                    height: hbar.track.height,
+                };
+                d.draw_rectangle_rec(corner, track_color);
             }
         }
 
-        // Cursor
-        if self.has_focus {
-            let cursor_line_start = self.line_start(self.cursor_position);
-            let line_number = self.content[..cursor_line_start]
-                .chars()
-                .filter(|c| *c == '\n')
-                .count();
-            let prefix = &self.content[cursor_line_start..self.cursor_position];
-            let prefix_width = fonts.measure_text(prefix, CONTENT_FONT_SIZE).x;
-            let cursor_x = bounds.x + H_PADDING + prefix_width;
-            let cursor_y = content_top + line_number as f32 * LINE_HEIGHT;
-
-            if cursor_y >= content_top && cursor_y <= bounds.y + bounds.height - LINE_HEIGHT {
-                d.draw_rectangle(
-                    cursor_x.round() as i32,
-                    cursor_y as i32,
-                    CARET_WIDTH,
-                    CONTENT_FONT_SIZE.round() as i32,
-                    theme.cursor,
-                );
-            }
-        }
-
-        // Status/result area
-        if self.show_result {
-            let status_y = bounds.y + bounds.height - LINE_HEIGHT - V_PADDING;
-            d.draw_rectangle(
-                bounds.x as i32,
-                status_y as i32,
-                bounds.width as i32,
-                LINE_HEIGHT as i32,
-                theme.panel,
-            );
+        if let Some(status_rect) = layout.status_rect {
+            d.draw_rectangle_rec(status_rect, theme.panel);
             if let Some(message) = &self.last_result {
+                let text_y = status_rect.y + (status_rect.height - LINE_HEIGHT).max(0.0) * 0.5;
                 fonts.draw_text(
                     d,
                     message,
-                    Vector2::new(bounds.x + H_PADDING, status_y + V_PADDING / 2.0),
+                    Vector2::new(status_rect.x + H_PADDING, text_y),
                     12.0,
                     if message.starts_with("Error") {
                         theme.error
@@ -1166,9 +1568,11 @@ impl Pane for EditorPane {
                 );
             }
         }
+
+        self.last_layout = Some(layout);
     }
 
-    fn handle_input(&mut self, rl: &mut RaylibHandle, _bounds: Rectangle) -> bool {
+    fn handle_input(&mut self, rl: &mut RaylibHandle, bounds: Rectangle) -> bool {
         if !self.has_focus {
             return false;
         }
@@ -1180,6 +1584,151 @@ impl Pane for EditorPane {
         self.reset_key_repeat_if_released(rl);
 
         let mut handled = false;
+        let layout_snapshot = self.last_layout;
+        let mouse_pos = rl.get_mouse_position();
+
+        if let Some(layout) = layout_snapshot {
+            let wheel_move = rl.get_mouse_wheel_move();
+            let mut scrolled = false;
+            if wheel_move.abs() > f32::EPSILON {
+                let over_text = rect_contains(layout.text_rect, mouse_pos);
+                let over_vertical = layout
+                    .vertical
+                    .map(|metrics| rect_contains(metrics.track, mouse_pos))
+                    .unwrap_or(false);
+                let over_horizontal = layout
+                    .horizontal
+                    .map(|metrics| rect_contains(metrics.track, mouse_pos))
+                    .unwrap_or(false);
+                if over_text || over_vertical || over_horizontal || rect_contains(bounds, mouse_pos)
+                {
+                    let shift_mod = rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
+                        || rl.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT);
+                    if shift_mod && layout.max_scroll_x > 0.0 {
+                        let prev = self.scroll_x;
+                        let delta = -wheel_move * layout.char_width * SCROLL_WHEEL_LINES;
+                        self.scroll_x = (self.scroll_x + delta).clamp(0.0, layout.max_scroll_x);
+                        scrolled = (self.scroll_x - prev).abs() > f32::EPSILON;
+                    } else if layout.max_scroll_y > 0.0 {
+                        let prev = self.scroll_y;
+                        let delta = -wheel_move * LINE_HEIGHT * SCROLL_WHEEL_LINES;
+                        self.scroll_y = (self.scroll_y + delta).clamp(0.0, layout.max_scroll_y);
+                        scrolled = (self.scroll_y - prev).abs() > f32::EPSILON;
+                    }
+                }
+            }
+
+            if rl.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
+                if let Some(vbar) = layout.vertical {
+                    if rect_contains(vbar.track, mouse_pos) {
+                        if rect_contains(vbar.thumb, mouse_pos) {
+                            self.scroll_drag_state = Some(ScrollDragState {
+                                orientation: ScrollOrientation::Vertical,
+                                grab_offset: mouse_pos.y - vbar.thumb.y,
+                                track: vbar.track,
+                                view_length: vbar.view_length,
+                                content_length: vbar.content_length,
+                                thumb_size: vbar.thumb.height,
+                            });
+                            handled = true;
+                        } else {
+                            let prev = self.scroll_y;
+                            if mouse_pos.y < vbar.thumb.y {
+                                self.scroll_y = (self.scroll_y - layout.text_rect.height)
+                                    .clamp(0.0, layout.max_scroll_y);
+                            } else if mouse_pos.y > vbar.thumb.y + vbar.thumb.height {
+                                self.scroll_y = (self.scroll_y + layout.text_rect.height)
+                                    .clamp(0.0, layout.max_scroll_y);
+                            }
+                            if (self.scroll_y - prev).abs() > f32::EPSILON {
+                                scrolled = true;
+                                handled = true;
+                            }
+                        }
+                    }
+                }
+
+                if let Some(hbar) = layout.horizontal {
+                    if rect_contains(hbar.track, mouse_pos) {
+                        if rect_contains(hbar.thumb, mouse_pos) {
+                            self.scroll_drag_state = Some(ScrollDragState {
+                                orientation: ScrollOrientation::Horizontal,
+                                grab_offset: mouse_pos.x - hbar.thumb.x,
+                                track: hbar.track,
+                                view_length: hbar.view_length,
+                                content_length: hbar.content_length,
+                                thumb_size: hbar.thumb.width,
+                            });
+                            handled = true;
+                        } else {
+                            let prev = self.scroll_x;
+                            if mouse_pos.x < hbar.thumb.x {
+                                self.scroll_x = (self.scroll_x - layout.text_rect.width)
+                                    .clamp(0.0, layout.max_scroll_x);
+                            } else if mouse_pos.x > hbar.thumb.x + hbar.thumb.width {
+                                self.scroll_x = (self.scroll_x + layout.text_rect.width)
+                                    .clamp(0.0, layout.max_scroll_x);
+                            }
+                            if (self.scroll_x - prev).abs() > f32::EPSILON {
+                                scrolled = true;
+                                handled = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if rl.is_mouse_button_down(MouseButton::MOUSE_BUTTON_LEFT) {
+                if let Some(state) = self.scroll_drag_state {
+                    match state.orientation {
+                        ScrollOrientation::Vertical => {
+                            if layout.max_scroll_y > 0.0 {
+                                let scrollable = (state.track.height - state.thumb_size).max(0.0);
+                                if scrollable > 0.0 {
+                                    let mut offset =
+                                        mouse_pos.y - state.track.y - state.grab_offset;
+                                    offset = offset.clamp(0.0, scrollable);
+                                    let ratio = offset / scrollable;
+                                    let new_scroll = ratio * layout.max_scroll_y;
+                                    if (self.scroll_y - new_scroll).abs() > f32::EPSILON {
+                                        self.scroll_y = new_scroll;
+                                        scrolled = true;
+                                        handled = true;
+                                    }
+                                }
+                            }
+                        }
+                        ScrollOrientation::Horizontal => {
+                            if layout.max_scroll_x > 0.0 {
+                                let scrollable = (state.track.width - state.thumb_size).max(0.0);
+                                if scrollable > 0.0 {
+                                    let mut offset =
+                                        mouse_pos.x - state.track.x - state.grab_offset;
+                                    offset = offset.clamp(0.0, scrollable);
+                                    let ratio = offset / scrollable;
+                                    let new_scroll = ratio * layout.max_scroll_x;
+                                    if (self.scroll_x - new_scroll).abs() > f32::EPSILON {
+                                        self.scroll_x = new_scroll;
+                                        scrolled = true;
+                                        handled = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if rl.is_mouse_button_released(MouseButton::MOUSE_BUTTON_LEFT) {
+                self.scroll_drag_state = None;
+            }
+
+            if scrolled {
+                self.auto_scroll_to_cursor = false;
+                handled = true;
+            }
+        }
+
         let ctrl = rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL)
             || rl.is_key_down(KeyboardKey::KEY_RIGHT_CONTROL)
             || rl.is_key_down(KeyboardKey::KEY_LEFT_SUPER)
@@ -1326,4 +1875,14 @@ impl Pane for EditorPane {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
+}
+
+fn rect_contains(rect: Rectangle, point: Vector2) -> bool {
+    if rect.width <= 0.0 || rect.height <= 0.0 {
+        return false;
+    }
+    point.x >= rect.x
+        && point.x <= rect.x + rect.width
+        && point.y >= rect.y
+        && point.y <= rect.y + rect.height
 }
