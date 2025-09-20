@@ -1,5 +1,5 @@
-use crate::interpreter::types::Expr;
 use crate::interpreter::evaluator::Evaluator;
+use crate::interpreter::types::Expr;
 
 impl Evaluator {
     pub fn apply_builtin(&mut self, name: &str, args: &[Expr]) -> Result<Expr, String> {

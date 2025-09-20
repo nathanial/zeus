@@ -1,14 +1,13 @@
-use crate::interpreter::*;
 use super::helpers::*;
+use crate::interpreter::*;
 
 #[test]
 fn test_eval_list() {
     let result = eval_to_list("(list 1 2 3)");
-    assert_eq!(result, vec![
-        Expr::Number(1.0),
-        Expr::Number(2.0),
-        Expr::Number(3.0),
-    ]);
+    assert_eq!(
+        result,
+        vec![Expr::Number(1.0), Expr::Number(2.0), Expr::Number(3.0),]
+    );
 
     let result = eval_to_list("(list)");
     assert_eq!(result, vec![]);
@@ -25,10 +24,7 @@ fn test_eval_car() {
 #[test]
 fn test_eval_cdr() {
     let result = eval_to_list("(cdr (list 1 2 3))");
-    assert_eq!(result, vec![
-        Expr::Number(2.0),
-        Expr::Number(3.0),
-    ]);
+    assert_eq!(result, vec![Expr::Number(2.0), Expr::Number(3.0),]);
 
     let result = eval_to_list("(cdr (list))");
     assert_eq!(result, vec![]);
@@ -37,37 +33,39 @@ fn test_eval_cdr() {
 #[test]
 fn test_eval_cons() {
     let result = eval_to_list("(cons 0 (list 1 2))");
-    assert_eq!(result, vec![
-        Expr::Number(0.0),
-        Expr::Number(1.0),
-        Expr::Number(2.0),
-    ]);
+    assert_eq!(
+        result,
+        vec![Expr::Number(0.0), Expr::Number(1.0), Expr::Number(2.0),]
+    );
 
     let result = eval_to_list("(cons 1 2)");
-    assert_eq!(result, vec![
-        Expr::Number(1.0),
-        Expr::Number(2.0),
-    ]);
+    assert_eq!(result, vec![Expr::Number(1.0), Expr::Number(2.0),]);
 }
 
 #[test]
 fn test_append() {
     let result = eval_to_list("(append (list 1 2) (list 3 4))");
-    assert_eq!(result, vec![
-        Expr::Number(1.0),
-        Expr::Number(2.0),
-        Expr::Number(3.0),
-        Expr::Number(4.0),
-    ]);
+    assert_eq!(
+        result,
+        vec![
+            Expr::Number(1.0),
+            Expr::Number(2.0),
+            Expr::Number(3.0),
+            Expr::Number(4.0),
+        ]
+    );
 
     let result = eval_to_list("(append (list 1) (list 2 3) (list 4 5))");
-    assert_eq!(result, vec![
-        Expr::Number(1.0),
-        Expr::Number(2.0),
-        Expr::Number(3.0),
-        Expr::Number(4.0),
-        Expr::Number(5.0),
-    ]);
+    assert_eq!(
+        result,
+        vec![
+            Expr::Number(1.0),
+            Expr::Number(2.0),
+            Expr::Number(3.0),
+            Expr::Number(4.0),
+            Expr::Number(5.0),
+        ]
+    );
 
     let result = eval_to_list("(append)");
     assert_eq!(result, vec![]);
@@ -76,12 +74,15 @@ fn test_append() {
 #[test]
 fn test_reverse() {
     let result = eval_to_list("(reverse (list 1 2 3 4))");
-    assert_eq!(result, vec![
-        Expr::Number(4.0),
-        Expr::Number(3.0),
-        Expr::Number(2.0),
-        Expr::Number(1.0),
-    ]);
+    assert_eq!(
+        result,
+        vec![
+            Expr::Number(4.0),
+            Expr::Number(3.0),
+            Expr::Number(2.0),
+            Expr::Number(1.0),
+        ]
+    );
 
     let result = eval_to_list("(reverse (list))");
     assert_eq!(result, vec![]);
@@ -111,7 +112,10 @@ fn test_nth_out_of_bounds() {
 #[test]
 fn test_nthcdr() {
     let result = eval_to_list("(nthcdr 0 (list 1 2 3))");
-    assert_eq!(result, vec![Expr::Number(1.0), Expr::Number(2.0), Expr::Number(3.0)]);
+    assert_eq!(
+        result,
+        vec![Expr::Number(1.0), Expr::Number(2.0), Expr::Number(3.0)]
+    );
 
     let result = eval_to_list("(nthcdr 1 (list 1 2 3))");
     assert_eq!(result, vec![Expr::Number(2.0), Expr::Number(3.0)]);
@@ -135,10 +139,13 @@ fn test_member() {
     assert_eq!(result, vec![]);
 
     let result = Evaluator::eval_once("(member \"b\" (list \"a\" \"b\" \"c\"))").unwrap();
-    assert_eq!(result, Expr::List(vec![
-        Expr::String("b".to_string()),
-        Expr::String("c".to_string()),
-    ]));
+    assert_eq!(
+        result,
+        Expr::List(vec![
+            Expr::String("b".to_string()),
+            Expr::String("c".to_string()),
+        ])
+    );
 }
 
 #[test]
@@ -150,11 +157,14 @@ fn test_list_operations_combination() {
     assert_eq!(result, Expr::Number(2.0));
 
     let result = evaluator.eval_str("(cons 0 (reverse (cdr lst)))").unwrap();
-    assert_eq!(result, Expr::List(vec![
-        Expr::Number(0.0),
-        Expr::Number(5.0),
-        Expr::Number(4.0),
-        Expr::Number(3.0),
-        Expr::Number(2.0),
-    ]));
+    assert_eq!(
+        result,
+        Expr::List(vec![
+            Expr::Number(0.0),
+            Expr::Number(5.0),
+            Expr::Number(4.0),
+            Expr::Number(3.0),
+            Expr::Number(2.0),
+        ])
+    );
 }

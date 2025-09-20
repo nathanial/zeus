@@ -1,5 +1,5 @@
-use crate::interpreter::*;
 use super::helpers::*;
+use crate::interpreter::*;
 
 #[test]
 fn test_let_basic() {
@@ -31,13 +31,18 @@ fn test_let_parallel_binding() {
 fn test_let_star_sequential_binding() {
     // In let*, bindings are evaluated sequentially
     assert_eq!(eval_to_number("(let* ((x 10) (y x)) y)"), 10.0);
-    assert_eq!(eval_to_number("(let* ((x 10) (y (* x 2)) (z (+ x y))) z)"), 30.0);
+    assert_eq!(
+        eval_to_number("(let* ((x 10) (y (* x 2)) (z (+ x y))) z)"),
+        30.0
+    );
 }
 
 #[test]
 fn test_let_multiple_body_expressions() {
     let mut evaluator = Evaluator::new();
-    let result = evaluator.eval_str("(let ((x 10)) (define y 20) (+ x y))").unwrap();
+    let result = evaluator
+        .eval_str("(let ((x 10)) (define y 20) (+ x y))")
+        .unwrap();
     assert_eq!(result, Expr::Number(30.0));
 }
 
@@ -62,9 +67,9 @@ fn test_cond_no_match() {
 #[test]
 fn test_cond_multiple_expressions() {
     let mut evaluator = Evaluator::new();
-    let result = evaluator.eval_str(
-        "(cond ((> 3 2) (define x 10) (+ x 5)) (else 0))"
-    ).unwrap();
+    let result = evaluator
+        .eval_str("(cond ((> 3 2) (define x 10) (+ x 5)) (else 0))")
+        .unwrap();
     assert_eq!(result, Expr::Number(15.0));
 }
 
@@ -92,7 +97,10 @@ fn test_and_short_circuit() {
 fn test_and_returns_last_truthy() {
     assert_eq!(eval_to_string("(and 1 2 \"hello\")"), "hello");
     let result = eval_to_list("(and 1 (list 1 2 3))");
-    assert_eq!(result, vec![Expr::Number(1.0), Expr::Number(2.0), Expr::Number(3.0)]);
+    assert_eq!(
+        result,
+        vec![Expr::Number(1.0), Expr::Number(2.0), Expr::Number(3.0)]
+    );
 }
 
 #[test]
@@ -128,7 +136,9 @@ fn test_progn() {
     assert_eq!(eval_to_number("(progn 1 2 3)"), 3.0);
 
     let mut evaluator = Evaluator::new();
-    evaluator.eval_str("(progn (define x 10) (define y 20))").unwrap();
+    evaluator
+        .eval_str("(progn (define x 10) (define y 20))")
+        .unwrap();
     assert_eq!(evaluator.eval_str("(+ x y)").unwrap(), Expr::Number(30.0));
 }
 
@@ -148,56 +158,76 @@ fn test_unless() {
 
 #[test]
 fn test_case() {
-    assert_eq!(eval_to_string("(case 2 (1 \"one\") (2 \"two\") (else \"other\"))"), "two");
-    assert_eq!(eval_to_string("(case 5 (1 \"one\") (2 \"two\") (else \"other\"))"), "other");
+    assert_eq!(
+        eval_to_string("(case 2 (1 \"one\") (2 \"two\") (else \"other\"))"),
+        "two"
+    );
+    assert_eq!(
+        eval_to_string("(case 5 (1 \"one\") (2 \"two\") (else \"other\"))"),
+        "other"
+    );
     assert_eq!(eval_to_list("(case 5 (1 \"one\") (2 \"two\"))"), vec![]);
 
     // Case with multiple values
-    assert_eq!(eval_to_string("(case 2 ((1 2 3) \"small\") (else \"big\"))"), "small");
+    assert_eq!(
+        eval_to_string("(case 2 ((1 2 3) \"small\") (else \"big\"))"),
+        "small"
+    );
 }
 
 #[test]
 fn test_case_string() {
-    assert_eq!(eval_to_string("(case \"b\" ((\"a\") \"A\") ((\"b\") \"B\") (else \"?\"))"), "B");
+    assert_eq!(
+        eval_to_string("(case \"b\" ((\"a\") \"A\") ((\"b\") \"B\") (else \"?\"))"),
+        "B"
+    );
 }
 
 #[test]
 fn test_case_with_expressions() {
     let mut evaluator = Evaluator::new();
     evaluator.eval_str("(define x 2)").unwrap();
-    let result = evaluator.eval_str(
-        "(case x
+    let result = evaluator
+        .eval_str(
+            "(case x
            (1 \"one\")
            (2 (progn (define y 10) (+ y 5)))
-           (else \"other\"))"
-    ).unwrap();
+           (else \"other\"))",
+        )
+        .unwrap();
     assert_eq!(result, Expr::Number(15.0));
 }
 
 #[test]
 fn test_progn_in_conditionals() {
-    assert_eq!(eval_to_number(
-        "(when (> 3 2) (define y 20) (+ y 10))"
-    ), 30.0);
+    assert_eq!(
+        eval_to_number("(when (> 3 2) (define y 20) (+ y 10))"),
+        30.0
+    );
 }
 
 #[test]
 fn test_complex_let_and_cond() {
     let mut evaluator = Evaluator::new();
-    let result = evaluator.eval_str(
-        "(let ((x 10) (y 20))
+    let result = evaluator
+        .eval_str(
+            "(let ((x 10) (y 20))
            (cond ((> x y) \"x is greater\")
                  ((< x y) \"y is greater\")
-                 (else \"equal\")))"
-    ).unwrap();
+                 (else \"equal\")))",
+        )
+        .unwrap();
     assert_eq!(result, Expr::String("y is greater".to_string()));
 }
 
 #[test]
 fn test_nested_let() {
-    assert_eq!(eval_to_number(
-        "(let ((x 10))
+    assert_eq!(
+        eval_to_number(
+            "(let ((x 10))
            (let ((y 20))
              (+ x y)))"
-    ), 30.0);
+        ),
+        30.0
+    );
 }

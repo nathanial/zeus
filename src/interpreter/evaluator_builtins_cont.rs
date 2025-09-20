@@ -1,5 +1,5 @@
-use crate::interpreter::types::Expr;
 use crate::interpreter::evaluator::Evaluator;
+use crate::interpreter::types::Expr;
 
 impl Evaluator {
     pub fn builtin_nth(&mut self, args: &[Expr]) -> Result<Expr, String> {
@@ -13,11 +13,10 @@ impl Evaluator {
         };
 
         match &args[1] {
-            Expr::List(list) => {
-                list.get(index)
-                    .cloned()
-                    .ok_or_else(|| "nth index out of bounds".to_string())
-            }
+            Expr::List(list) => list
+                .get(index)
+                .cloned()
+                .ok_or_else(|| "nth index out of bounds".to_string()),
             _ => Err("nth requires a list as second argument".to_string()),
         }
     }
@@ -61,7 +60,7 @@ impl Evaluator {
             }
         }
 
-        Ok(Expr::List(vec![]))  // Not found returns empty list
+        Ok(Expr::List(vec![])) // Not found returns empty list
     }
 
     pub fn builtin_mapcar(&mut self, args: &[Expr]) -> Result<Expr, String> {
@@ -90,8 +89,9 @@ impl Evaluator {
 
             let val = match func {
                 Expr::Symbol(name) => self.apply_builtin(name, &func_args)?,
-                Expr::List(lambda) if lambda.len() == 3 &&
-                    lambda[0] == Expr::Symbol("lambda".to_string()) => {
+                Expr::List(lambda)
+                    if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) =>
+                {
                     self.apply_lambda(lambda, &func_args)?
                 }
                 _ => return Err("mapcar requires a function as first argument".to_string()),
@@ -117,8 +117,9 @@ impl Evaluator {
         for item in list {
             let test_result = match pred {
                 Expr::Symbol(name) => self.apply_builtin(name, &[item.clone()])?,
-                Expr::List(lambda) if lambda.len() == 3 &&
-                    lambda[0] == Expr::Symbol("lambda".to_string()) => {
+                Expr::List(lambda)
+                    if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) =>
+                {
                     self.apply_lambda(lambda, &[item.clone()])?
                 }
                 _ => return Err("filter requires a predicate function".to_string()),
@@ -153,8 +154,9 @@ impl Evaluator {
         for item in list {
             let test_result = match pred {
                 Expr::Symbol(name) => self.apply_builtin(name, &[item.clone()])?,
-                Expr::List(lambda) if lambda.len() == 3 &&
-                    lambda[0] == Expr::Symbol("lambda".to_string()) => {
+                Expr::List(lambda)
+                    if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) =>
+                {
                     self.apply_lambda(lambda, &[item.clone()])?
                 }
                 _ => return Err("remove requires a predicate function".to_string()),
@@ -166,7 +168,8 @@ impl Evaluator {
                 _ => true,
             };
 
-            if !is_true {  // Note: opposite of filter
+            if !is_true {
+                // Note: opposite of filter
                 result.push(item.clone());
             }
         }
@@ -187,7 +190,7 @@ impl Evaluator {
 
         if list.is_empty() {
             if args.len() == 3 {
-                return Ok(args[2].clone());  // Return initial value
+                return Ok(args[2].clone()); // Return initial value
             } else {
                 return Err("reduce of empty list with no initial value".to_string());
             }
@@ -202,8 +205,9 @@ impl Evaluator {
         for item in &list[start_idx..] {
             acc = match func {
                 Expr::Symbol(name) => self.apply_builtin(name, &[acc, item.clone()])?,
-                Expr::List(lambda) if lambda.len() == 3 &&
-                    lambda[0] == Expr::Symbol("lambda".to_string()) => {
+                Expr::List(lambda)
+                    if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) =>
+                {
                     self.apply_lambda(lambda, &[acc, item.clone()])?
                 }
                 _ => return Err("reduce requires a function as first argument".to_string()),
@@ -226,8 +230,9 @@ impl Evaluator {
 
         match func {
             Expr::Symbol(name) => self.apply_builtin(name, &list_args),
-            Expr::List(lambda) if lambda.len() == 3 &&
-                lambda[0] == Expr::Symbol("lambda".to_string()) => {
+            Expr::List(lambda)
+                if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) =>
+            {
                 self.apply_lambda(lambda, &list_args)
             }
             _ => Err("apply requires a function as first argument".to_string()),
@@ -244,8 +249,9 @@ impl Evaluator {
 
         match func {
             Expr::Symbol(name) => self.apply_builtin(name, func_args),
-            Expr::List(lambda) if lambda.len() == 3 &&
-                lambda[0] == Expr::Symbol("lambda".to_string()) => {
+            Expr::List(lambda)
+                if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) =>
+            {
                 self.apply_lambda(lambda, func_args)
             }
             _ => Err("funcall requires a function as first argument".to_string()),
@@ -278,9 +284,10 @@ impl Evaluator {
                 }
             }
             Expr::Symbol(s) => s.clone(),
-            Expr::String(s) => s.clone(),  // Print strings without quotes
+            Expr::String(s) => s.clone(), // Print strings without quotes
             Expr::List(list) => {
-                let items: Vec<String> = list.iter().map(|e| self.format_expr_for_print(e)).collect();
+                let items: Vec<String> =
+                    list.iter().map(|e| self.format_expr_for_print(e)).collect();
                 format!("({})", items.join(" "))
             }
         }

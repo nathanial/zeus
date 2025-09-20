@@ -1,8 +1,5 @@
+use crate::interpreter::{evaluator::Evaluator, types::Expr};
 use std::io::{self, Write};
-use crate::interpreter::{
-    types::Expr,
-    evaluator::Evaluator,
-};
 
 pub struct Repl {
     evaluator: Evaluator,

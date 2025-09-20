@@ -14,7 +14,8 @@ fn test_repl_integration() {
     assert_eq!(result, Expr::Number(20.0));
 
     // Test lambda
-    repl.evaluate("(define square (lambda (n) (* n n)))").unwrap();
+    repl.evaluate("(define square (lambda (n) (* n n)))")
+        .unwrap();
     let result = repl.evaluate("(square 7)").unwrap();
     assert_eq!(result, Expr::Number(49.0));
 }
@@ -29,7 +30,10 @@ fn test_format_expr() {
     assert_eq!(repl.format_expr(&Expr::Number(-17.0)), "-17");
 
     // Test string formatting
-    assert_eq!(repl.format_expr(&Expr::String("hello".to_string())), r#""hello""#);
+    assert_eq!(
+        repl.format_expr(&Expr::String("hello".to_string())),
+        r#""hello""#
+    );
 
     // Test symbol formatting
     assert_eq!(repl.format_expr(&Expr::Symbol("x".to_string())), "x");

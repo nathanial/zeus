@@ -1,8 +1,5 @@
 use crate::interpreter::{
-    types::Expr,
-    environment::Environment,
-    tokenizer::Tokenizer,
-    parser::Parser,
+    environment::Environment, parser::Parser, tokenizer::Tokenizer, types::Expr,
 };
 
 pub struct Evaluator {
@@ -110,10 +107,7 @@ impl Evaluator {
         };
 
         // Build the lambda expression: (lambda params body...)
-        let mut lambda_expr = vec![
-            Expr::Symbol("lambda".to_string()),
-            params,
-        ];
+        let mut lambda_expr = vec![Expr::Symbol("lambda".to_string()), params];
 
         // If there are multiple body expressions, wrap them in progn
         if list.len() == 4 {

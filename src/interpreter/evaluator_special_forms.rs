@@ -1,5 +1,5 @@
-use crate::interpreter::types::Expr;
 use crate::interpreter::evaluator::Evaluator;
+use crate::interpreter::types::Expr;
 
 impl Evaluator {
     pub fn eval_cond(&mut self, list: &[Expr]) -> Result<Expr, String> {
@@ -207,9 +207,7 @@ impl Evaluator {
 
                     // Check if key matches any value in the test list
                     let matches = match test_value {
-                        Expr::List(values) => {
-                            values.iter().any(|v| self.expr_equal(&key, v))
-                        }
+                        Expr::List(values) => values.iter().any(|v| self.expr_equal(&key, v)),
                         single_value => self.expr_equal(&key, single_value),
                     };
 
@@ -252,7 +250,9 @@ impl Evaluator {
 
         match func {
             Expr::Symbol(name) => self.apply_builtin(&name, &args),
-            Expr::List(lambda) if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) => {
+            Expr::List(lambda)
+                if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) =>
+            {
                 self.apply_lambda(&lambda, &args)
             }
             _ => Err(format!("Cannot apply: {:?}", func)),

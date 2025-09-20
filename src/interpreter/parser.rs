@@ -1,4 +1,4 @@
-use crate::interpreter::types::{Token, Expr};
+use crate::interpreter::types::{Expr, Token};
 
 pub struct Parser {
     tokens: Vec<Token>,

@@ -1,5 +1,5 @@
-use crate::interpreter::*;
 use super::helpers::*;
+use crate::interpreter::*;
 
 #[test]
 fn test_eval_number() {
@@ -34,11 +34,14 @@ fn test_eval_if_false() {
 #[test]
 fn test_eval_quote() {
     let result = Evaluator::eval_once("(quote (+ 1 2))").unwrap();
-    assert_eq!(result, Expr::List(vec![
-        Expr::Symbol("+".to_string()),
-        Expr::Number(1.0),
-        Expr::Number(2.0),
-    ]));
+    assert_eq!(
+        result,
+        Expr::List(vec![
+            Expr::Symbol("+".to_string()),
+            Expr::Number(1.0),
+            Expr::Number(2.0),
+        ])
+    );
 
     // Test single-quote syntax
     let result = Evaluator::eval_once("(quote x)").unwrap();
@@ -62,7 +65,7 @@ fn test_error_invalid_application() {
 fn test_error_wrong_arg_count() {
     let result = Evaluator::eval_once("(car)");
     assert!(result.is_err());
-    
+
     let result = Evaluator::eval_once("(car 1 2 3)");
     assert!(result.is_err());
 }

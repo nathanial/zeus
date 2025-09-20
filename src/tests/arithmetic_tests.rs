@@ -1,5 +1,5 @@
-use crate::interpreter::*;
 use super::helpers::*;
+use crate::interpreter::*;
 
 #[test]
 fn test_eval_addition() {

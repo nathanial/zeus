@@ -35,11 +35,14 @@ fn test_parser_list() {
     ];
     let mut parser = Parser::new(tokens);
     let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::List(vec![
-        Expr::Symbol("+".to_string()),
-        Expr::Number(1.0),
-        Expr::Number(2.0),
-    ]));
+    assert_eq!(
+        expr,
+        Expr::List(vec![
+            Expr::Symbol("+".to_string()),
+            Expr::Number(1.0),
+            Expr::Number(2.0),
+        ])
+    );
 }
 
 #[test]
@@ -57,13 +60,16 @@ fn test_parser_nested_list() {
     ];
     let mut parser = Parser::new(tokens);
     let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::List(vec![
-        Expr::Symbol("+".to_string()),
+    assert_eq!(
+        expr,
         Expr::List(vec![
-            Expr::Symbol("*".to_string()),
-            Expr::Number(2.0),
-            Expr::Number(3.0),
-        ]),
-        Expr::Number(4.0),
-    ]));
+            Expr::Symbol("+".to_string()),
+            Expr::List(vec![
+                Expr::Symbol("*".to_string()),
+                Expr::Number(2.0),
+                Expr::Number(3.0),
+            ]),
+            Expr::Number(4.0),
+        ])
+    );
 }

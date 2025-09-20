@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::interpreter::types::Expr;
+use std::collections::HashMap;
 
 pub struct Environment {
     scopes: Vec<HashMap<String, Expr>>,
@@ -14,12 +14,9 @@ impl Environment {
 
     pub fn define_builtins(&mut self) {
         let builtins = vec![
-            "+", "-", "*", "/", "=", "<", ">",
-            "list", "car", "cdr", "cons",
-            "append", "reverse", "length", "nth", "nthcdr",
-            "mapcar", "filter", "remove", "member", "reduce",
-            "apply", "funcall",
-            "print", "println"
+            "+", "-", "*", "/", "=", "<", ">", "list", "car", "cdr", "cons", "append", "reverse",
+            "length", "nth", "nthcdr", "mapcar", "filter", "remove", "member", "reduce", "apply",
+            "funcall", "print", "println",
         ];
         for builtin in builtins {
             self.set(builtin.to_string(), Expr::Symbol(builtin.to_string()));

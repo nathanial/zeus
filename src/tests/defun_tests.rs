@@ -13,7 +13,9 @@ fn test_defun_basic() {
 #[test]
 fn test_defun_multiple_params() {
     let mut evaluator = Evaluator::new();
-    evaluator.eval_str("(defun add3 (a b c) (+ a (+ b c)))").unwrap();
+    evaluator
+        .eval_str("(defun add3 (a b c) (+ a (+ b c)))")
+        .unwrap();
     let result = evaluator.eval_str("(add3 10 20 30)").unwrap();
     assert_eq!(result, Expr::Number(60.0));
 }
@@ -21,9 +23,13 @@ fn test_defun_multiple_params() {
 #[test]
 fn test_defun_multiple_body_expressions() {
     let mut evaluator = Evaluator::new();
-    evaluator.eval_str("(defun compute (x)
+    evaluator
+        .eval_str(
+            "(defun compute (x)
         (define temp (* x 2))
-        (+ temp 10))").unwrap();
+        (+ temp 10))",
+        )
+        .unwrap();
     let result = evaluator.eval_str("(compute 5)").unwrap();
     assert_eq!(result, Expr::Number(20.0));
 }
@@ -31,10 +37,14 @@ fn test_defun_multiple_body_expressions() {
 #[test]
 fn test_defun_recursive() {
     let mut evaluator = Evaluator::new();
-    evaluator.eval_str("(defun factorial (n)
+    evaluator
+        .eval_str(
+            "(defun factorial (n)
         (if (< n 2)
             1
-            (* n (factorial (- n 1)))))").unwrap();
+            (* n (factorial (- n 1)))))",
+        )
+        .unwrap();
     let result = evaluator.eval_str("(factorial 5)").unwrap();
     assert_eq!(result, Expr::Number(120.0));
 }
@@ -43,7 +53,9 @@ fn test_defun_recursive() {
 fn test_defun_with_closures() {
     let mut evaluator = Evaluator::new();
     evaluator.eval_str("(define offset 100)").unwrap();
-    evaluator.eval_str("(defun add_offset (x) (+ x offset))").unwrap();
+    evaluator
+        .eval_str("(defun add_offset (x) (+ x offset))")
+        .unwrap();
     let result = evaluator.eval_str("(add_offset 50)").unwrap();
     assert_eq!(result, Expr::Number(150.0));
 }

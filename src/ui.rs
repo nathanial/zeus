@@ -1,12 +1,16 @@
-use raylib::prelude::*;
 use crate::interpreter::evaluator::Evaluator;
+use raylib::prelude::*;
 use std::collections::VecDeque;
+use std::path::Path;
 
 const WINDOW_WIDTH: i32 = 900;
 const WINDOW_HEIGHT: i32 = 650;
 const FONT_SIZE: i32 = 18;
 const LINE_HEIGHT: i32 = 22;
 const PADDING: i32 = 15;
+const FONT_SPACING: f32 = 1.0;
+const TITLE_FONT_SIZE: f32 = 20.0;
+const HELP_FONT_SIZE: f32 = 14.0;
 const MAX_HISTORY: usize = 100;
 const INPUT_COLOR: Color = Color::WHITE;
 const OUTPUT_COLOR: Color = Color::new(100, 255, 100, 255);
@@ -18,6 +22,26 @@ struct ReplLine {
     text: String,
     is_input: bool,
     is_error: bool,
+}
+
+fn load_monospace_font(rl: &mut RaylibHandle, thread: &RaylibThread, base_size: i32) -> Font {
+    const FONT_PATH_CANDIDATES: [&str; 5] = [
+        "/System/Applications/Utilities/Terminal.app/Contents/Resources/Fonts/SF-Mono-Regular.otf",
+        "/System/Library/Fonts/SF-Mono-Regular.otf",
+        "/System/Library/Fonts/SFMono-Regular.otf",
+        "/Library/Fonts/Menlo.ttc",
+        "/System/Library/Fonts/Menlo.ttc",
+    ];
+
+    for path in FONT_PATH_CANDIDATES.iter() {
+        if Path::new(path).exists() {
+            if let Ok(font) = rl.load_font_ex(thread, path, base_size, None) {
+                return font;
+            }
+        }
+    }
+
+    rl.load_font_default()
 }
 
 pub fn run_ui() {
@@ -56,7 +80,8 @@ pub fn run_ui() {
         is_error: false,
     });
 
-    // Just use the default font with a larger size - it's clean and works well
+    let font = load_monospace_font(&mut rl, &thread, FONT_SIZE);
+
     rl.set_target_fps(60);
 
     while !rl.window_should_close() {
@@ -143,7 +168,14 @@ pub fn run_ui() {
 
         // Draw title bar
         d.draw_rectangle(0, 0, d.get_screen_width(), 35, Color::new(35, 35, 55, 255));
-        d.draw_text("Zeus LISP - Graphical REPL", 15, 8, 20, Color::WHITE);
+        d.draw_text_ex(
+            &font,
+            "Zeus LISP - Graphical REPL",
+            Vector2::new(15.0, 8.0),
+            TITLE_FONT_SIZE,
+            FONT_SPACING,
+            Color::WHITE,
+        );
 
         // Draw history area
         let screen_width = d.get_screen_width();
@@ -165,7 +197,14 @@ pub fn run_ui() {
                         OUTPUT_COLOR
                     };
 
-                    scissor.draw_text(&line.text, PADDING, y, FONT_SIZE, color);
+                    scissor.draw_text_ex(
+                        &font,
+                        &line.text,
+                        Vector2::new(PADDING as f32, y as f32),
+                        FONT_SIZE as f32,
+                        FONT_SPACING,
+                        color,
+                    );
                 }
                 y += LINE_HEIGHT;
             }
@@ -174,20 +213,42 @@ pub fn run_ui() {
         // Draw input box
         let input_y = screen_height - 65;
         d.draw_rectangle(0, input_y - 10, screen_width, 75, INPUT_BOX_COLOR);
-        d.draw_text("Input:", PADDING, input_y, FONT_SIZE, Color::GRAY);
+        d.draw_text_ex(
+            &font,
+            "Input:",
+            Vector2::new(PADDING as f32, input_y as f32),
+            FONT_SIZE as f32,
+            FONT_SPACING,
+            Color::GRAY,
+        );
 
         let prompt = format!("> {}", current_input);
-        d.draw_text(&prompt, PADDING, input_y + 22, FONT_SIZE, INPUT_COLOR);
+        let prompt_position = Vector2::new(PADDING as f32, (input_y + 22) as f32);
+        d.draw_text_ex(
+            &font,
+            &prompt,
+            prompt_position,
+            FONT_SIZE as f32,
+            FONT_SPACING,
+            INPUT_COLOR,
+        );
 
         // Draw cursor
         if cursor_visible {
-            let cursor_x = PADDING + d.measure_text(&prompt, FONT_SIZE);
+            let prompt_metrics = d.measure_text_ex(&font, &prompt, FONT_SIZE as f32, FONT_SPACING);
+            let cursor_x = (PADDING as f32 + prompt_metrics.x).round() as i32;
             d.draw_rectangle(cursor_x, input_y + 22, 2, FONT_SIZE, INPUT_COLOR);
         }
 
         // Draw help text at bottom
-        d.draw_text("ESC: Exit | Enter: Evaluate | Mouse Wheel: Scroll",
-                   PADDING, screen_height - 20, 14, Color::GRAY);
+        d.draw_text_ex(
+            &font,
+            "ESC: Exit | Enter: Evaluate | Mouse Wheel: Scroll",
+            Vector2::new(PADDING as f32, (screen_height - 20) as f32),
+            HELP_FONT_SIZE,
+            FONT_SPACING,
+            Color::GRAY,
+        );
     }
 }
 
