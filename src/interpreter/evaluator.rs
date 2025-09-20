@@ -22,25 +22,46 @@ impl Evaluator {
     }
 
     pub fn parse(input: &str) -> Result<Expr, String> {
-        let mut tokenizer = Tokenizer::new(input);
-        let tokens = tokenizer.tokenize()?;
-
-        if tokens.is_empty() {
-            return Ok(Expr::List(vec![]));
+        let expressions = Self::parse_multiple(input)?;
+        match expressions.len() {
+            0 => Ok(Expr::List(vec![])),
+            1 => Ok(expressions.into_iter().next().unwrap()),
+            _ => Err("Extra tokens after expression".to_string()),
         }
-
-        let mut parser = Parser::new(tokens);
-        parser.parse()
     }
 
     pub fn eval_str(&mut self, input: &str) -> Result<Expr, String> {
-        let expr = Self::parse(input)?;
-        self.eval(&expr).map_err(|e| e.to_string())
+        let expressions = Self::parse_multiple(input)?;
+        self.eval_forms(expressions)
     }
 
     pub fn eval_once(input: &str) -> Result<Expr, String> {
         let mut evaluator = Self::new();
         evaluator.eval_str(input)
+    }
+
+    pub fn parse_multiple(input: &str) -> Result<Vec<Expr>, String> {
+        let mut tokenizer = Tokenizer::new(input);
+        let tokens = tokenizer.tokenize()?;
+
+        if tokens.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut parser = Parser::new(tokens);
+        parser.parse_all()
+    }
+
+    pub fn eval_forms(&mut self, expressions: Vec<Expr>) -> Result<Expr, String> {
+        if expressions.is_empty() {
+            return Ok(Expr::List(vec![]));
+        }
+
+        let mut last = Expr::List(vec![]);
+        for expr in expressions.iter() {
+            last = self.eval(expr).map_err(|e| e.to_string())?;
+        }
+        Ok(last)
     }
 
     // Helper function to convert Expr to numeric value

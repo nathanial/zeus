@@ -1,10 +1,10 @@
 use crate::fonts::load_monospace_font;
-use raylib::consts::TextureFilter;
+use raylib::consts::{TextureFilter, TextureWrap};
 use raylib::core::drawing::RaylibDraw;
 use raylib::core::text::{RaylibFont, WeakFont};
 use raylib::prelude::*;
 
-pub const IDE_FONT_SPACING: f32 = 1.0;
+pub const IDE_FONT_SPACING: f32 = 0.0;
 
 pub struct IdeFonts {
     custom: Option<Font>,
@@ -23,6 +23,9 @@ impl IdeFonts {
         fallback
             .texture()
             .set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_POINT);
+        fallback
+            .texture()
+            .set_texture_wrap(thread, TextureWrap::TEXTURE_WRAP_CLAMP);
 
         Self {
             custom,
@@ -46,13 +49,17 @@ impl IdeFonts {
         font_size: f32,
         color: Color,
     ) {
+        let snapped = Vector2::new(position.x.round(), position.y.round());
+
         if let Some(font) = self.custom.as_ref() {
-            target.draw_text_ex(font, text, position, font_size, self.spacing, color);
+            // Snapping avoids sampling the one-pixel gutter Raylib adds between glyphs, which otherwise
+            // shows up as a dark fringe when we render a high-resolution atlas with point filtering.
+            target.draw_text_ex(font, text, snapped, font_size, self.spacing, color);
         } else {
             target.draw_text_ex(
                 &self.fallback,
                 text,
-                position,
+                snapped,
                 font_size,
                 self.spacing,
                 color,

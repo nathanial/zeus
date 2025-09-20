@@ -7,18 +7,20 @@ use crate::ide::repl_pane::ReplPane;
 use crate::ide::symbol_browser::SymbolBrowserPane;
 use crate::ide::theme::Theme;
 use crate::interpreter::evaluator::Evaluator;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 pub struct IdeState {
     pub layout_manager: LayoutManager,
     pub panes: HashMap<String, Box<dyn Pane>>,
     pub theme: Theme,
-    pub shared_evaluator: Evaluator,
+    pub shared_evaluator: Rc<RefCell<Evaluator>>,
 }
 
 impl IdeState {
     pub fn new() -> Self {
-        let shared_evaluator = Evaluator::new();
+        let shared_evaluator = Rc::new(RefCell::new(Evaluator::new()));
 
         let mut panes: HashMap<String, Box<dyn Pane>> = HashMap::new();
 
@@ -30,7 +32,10 @@ impl IdeState {
 
         panes.insert(
             "editor".to_string(),
-            Box::new(EditorPane::new("editor".to_string())),
+            Box::new(EditorPane::new(
+                "editor".to_string(),
+                shared_evaluator.clone(),
+            )),
         );
 
         panes.insert(
@@ -90,7 +95,8 @@ impl IdeState {
         // Update the symbol browser with current environment
         if let Some(pane) = self.panes.get_mut("symbols") {
             if let Some(symbols_pane) = pane.as_any_mut().downcast_mut::<SymbolBrowserPane>() {
-                symbols_pane.update_environment(self.shared_evaluator.get_environment().clone());
+                let env_snapshot = self.shared_evaluator.borrow().get_environment().clone();
+                symbols_pane.update_environment(env_snapshot);
             }
         }
     }

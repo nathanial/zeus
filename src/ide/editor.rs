@@ -5,9 +5,11 @@ use crate::ide::theme::Theme;
 use crate::interpreter::evaluator::Evaluator;
 use raylib::prelude::*;
 use std::any::Any;
+use std::cell::RefCell;
 use std::cmp::{max, min};
 use std::fs;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 const MAX_UNDO_STACK: usize = 200;
 const TITLE_HEIGHT: f32 = 25.0;
@@ -90,7 +92,7 @@ pub struct EditorPane {
     selection: Option<(usize, usize)>,
     selection_anchor: Option<usize>,
     has_focus: bool,
-    evaluator: Evaluator,
+    evaluator: Rc<RefCell<Evaluator>>,
     last_result: Option<String>,
     show_result: bool,
     undo_stack: Vec<EditorSnapshot>,
@@ -114,7 +116,7 @@ pub struct EditorPane {
 }
 
 impl EditorPane {
-    pub fn new(id: String) -> Self {
+    pub fn new(id: String, evaluator: Rc<RefCell<Evaluator>>) -> Self {
         let mut pane = Self {
             id,
             title: "Editor".to_string(),
@@ -123,7 +125,7 @@ impl EditorPane {
             selection: None,
             selection_anchor: None,
             has_focus: false,
-            evaluator: Evaluator::new(),
+            evaluator,
             last_result: None,
             show_result: false,
             undo_stack: Vec::new(),
@@ -1092,17 +1094,40 @@ impl EditorPane {
     }
 
     fn evaluate_expression(&mut self) {
-        let expr = if let Some((start, end)) = self.selection_range() {
+        let source = if let Some((start, end)) = self.selection_range() {
+            self.content[start..end].to_string()
+        } else if let Some((start, end)) = self.current_form_range() {
             self.content[start..end].to_string()
         } else {
-            self.content.clone()
+            self.show_status_message("No expression to evaluate");
+            return;
         };
 
-        if expr.trim().is_empty() {
+        if source.trim().is_empty() {
+            self.show_status_message("No expression to evaluate");
             return;
         }
 
-        match self.evaluator.eval_str(&expr) {
+        self.evaluate_source(&source);
+    }
+
+    fn evaluate_buffer(&mut self) {
+        if self.content.trim().is_empty() {
+            self.show_status_message("Buffer is empty");
+            return;
+        }
+
+        let buffer = self.content.clone();
+        self.evaluate_source(&buffer);
+    }
+
+    fn evaluate_source(&mut self, source: &str) {
+        let result = {
+            let mut evaluator = self.evaluator.borrow_mut();
+            evaluator.eval_str(source)
+        };
+
+        match result {
             Ok(result) => {
                 let formatted = self.format_expr(&result);
                 self.show_status_message(format!("=> {}", formatted));
@@ -1111,6 +1136,244 @@ impl EditorPane {
                 self.show_status_message(format!("Error: {}", error));
             }
         }
+    }
+
+    fn current_form_range(&self) -> Option<(usize, usize)> {
+        if self.content.is_empty() {
+            return None;
+        }
+
+        let chars: Vec<(usize, char)> = self.content.char_indices().collect();
+        if chars.is_empty() {
+            return None;
+        }
+
+        let cursor = self.cursor_position.min(self.content.len());
+        let target = Self::previous_significant_index(&chars, cursor)?;
+        let ranges = Self::collect_top_level_form_ranges(&chars, self.content.len());
+
+        for (start, end) in ranges {
+            if target >= start && target < end {
+                return Some((start, end));
+            }
+            if target == end {
+                return Some((start, end));
+            }
+        }
+
+        None
+    }
+
+    fn collect_top_level_form_ranges(
+        chars: &[(usize, char)],
+        content_len: usize,
+    ) -> Vec<(usize, usize)> {
+        let mut ranges = Vec::new();
+        let mut i = 0;
+
+        while i < chars.len() {
+            let (pos, ch) = chars[i];
+
+            if ch.is_whitespace() {
+                i += 1;
+                continue;
+            }
+
+            if ch == ';' {
+                i = Self::skip_comment(chars, i);
+                continue;
+            }
+
+            if ch == '(' {
+                let (next, end) = Self::match_delimited(chars, i, '(', ')', content_len);
+                ranges.push((pos, end));
+                i = next;
+                continue;
+            }
+
+            if ch == '[' {
+                let (next, end) = Self::match_delimited(chars, i, '[', ']', content_len);
+                ranges.push((pos, end));
+                i = next;
+                continue;
+            }
+
+            if ch == '"' {
+                let (next, end) = Self::consume_string_literal(chars, i, content_len);
+                ranges.push((pos, end));
+                i = next;
+                continue;
+            }
+
+            let mut j = i + 1;
+            while j < chars.len() {
+                let (_, next_ch) = chars[j];
+                if next_ch.is_whitespace() || matches!(next_ch, '(' | ')' | '[' | ']' | ';') {
+                    break;
+                }
+                j += 1;
+            }
+
+            let end = if j < chars.len() {
+                chars[j].0
+            } else {
+                content_len
+            };
+            ranges.push((pos, end));
+            i = j;
+        }
+
+        ranges
+    }
+
+    fn previous_significant_index(chars: &[(usize, char)], cursor: usize) -> Option<usize> {
+        if chars.is_empty() {
+            return None;
+        }
+
+        let mut idx = match chars.binary_search_by(|(pos, _)| pos.cmp(&cursor)) {
+            Ok(i) => i,
+            Err(0) => return None,
+            Err(i) => i - 1,
+        };
+
+        loop {
+            let (pos, ch) = chars[idx];
+
+            if ch.is_whitespace() {
+                if idx == 0 {
+                    return None;
+                }
+                idx -= 1;
+                continue;
+            }
+
+            if ch == ';' {
+                if idx == 0 {
+                    return None;
+                }
+                while idx > 0 {
+                    idx -= 1;
+                    if chars[idx].1 == '\n' {
+                        break;
+                    }
+                }
+                if idx == 0 && chars[idx].1 != '\n' {
+                    return None;
+                }
+                continue;
+            }
+
+            return Some(pos);
+        }
+    }
+
+    fn match_delimited(
+        chars: &[(usize, char)],
+        start_index: usize,
+        open: char,
+        close: char,
+        content_len: usize,
+    ) -> (usize, usize) {
+        let mut depth = 0;
+        let mut in_string = false;
+        let mut escape = false;
+        let mut j = start_index;
+
+        while j < chars.len() {
+            let (_, ch) = chars[j];
+
+            if in_string {
+                if escape {
+                    escape = false;
+                } else {
+                    match ch {
+                        '\\' => escape = true,
+                        '"' => in_string = false,
+                        _ => {}
+                    }
+                }
+                j += 1;
+                continue;
+            }
+
+            match ch {
+                '"' => {
+                    in_string = true;
+                    j += 1;
+                    continue;
+                }
+                ';' => {
+                    j += 1;
+                    while j < chars.len() {
+                        let (_, comment_ch) = chars[j];
+                        if comment_ch == '\n' {
+                            break;
+                        }
+                        j += 1;
+                    }
+                    continue;
+                }
+                _ if ch == open => {
+                    depth += 1;
+                }
+                _ if ch == close => {
+                    depth -= 1;
+                    if depth == 0 {
+                        let end = if j + 1 < chars.len() {
+                            chars[j + 1].0
+                        } else {
+                            content_len
+                        };
+                        return (j + 1, end);
+                    }
+                }
+                _ => {}
+            }
+
+            j += 1;
+        }
+
+        (chars.len(), content_len)
+    }
+
+    fn consume_string_literal(
+        chars: &[(usize, char)],
+        start_index: usize,
+        content_len: usize,
+    ) -> (usize, usize) {
+        let mut j = start_index + 1;
+        let mut escape = false;
+
+        while j < chars.len() {
+            let (_, ch) = chars[j];
+            if escape {
+                escape = false;
+            } else if ch == '\\' {
+                escape = true;
+            } else if ch == '"' {
+                let end = if j + 1 < chars.len() {
+                    chars[j + 1].0
+                } else {
+                    content_len
+                };
+                return (j + 1, end);
+            }
+            j += 1;
+        }
+
+        (chars.len(), content_len)
+    }
+
+    fn skip_comment(chars: &[(usize, char)], mut index: usize) -> usize {
+        index += 1;
+        while index < chars.len() {
+            if chars[index].1 == '\n' {
+                return index + 1;
+            }
+            index += 1;
+        }
+        chars.len()
     }
 
     fn format_expr(&self, expr: &crate::interpreter::types::Expr) -> String {
@@ -1976,7 +2239,11 @@ impl Pane for EditorPane {
                 self.select_all();
                 handled = true;
             } else if rl.is_key_pressed(KeyboardKey::KEY_E) {
-                self.evaluate_expression();
+                if shift {
+                    self.evaluate_buffer();
+                } else {
+                    self.evaluate_expression();
+                }
                 handled = true;
             }
         }

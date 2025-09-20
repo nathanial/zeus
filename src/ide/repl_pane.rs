@@ -4,7 +4,9 @@ use crate::ide::theme::Theme;
 use crate::interpreter::evaluator::Evaluator;
 use raylib::prelude::*;
 use std::any::Any;
+use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::rc::Rc;
 
 struct ReplLine {
     text: String,
@@ -22,11 +24,11 @@ pub struct ReplPane {
     cursor_position: usize,
     scroll_offset: i32,
     has_focus: bool,
-    evaluator: Evaluator,
+    evaluator: Rc<RefCell<Evaluator>>,
 }
 
 impl ReplPane {
-    pub fn new(id: String, evaluator: Evaluator) -> Self {
+    pub fn new(id: String, evaluator: Rc<RefCell<Evaluator>>) -> Self {
         let mut history = VecDeque::new();
         history.push_back(ReplLine {
             text: "Zeus LISP REPL - Interactive Mode".to_string(),
@@ -70,7 +72,12 @@ impl ReplPane {
         self.command_history_index = None;
 
         // Evaluate the expression
-        match self.evaluator.eval_str(&self.current_input) {
+        let result = {
+            let mut evaluator = self.evaluator.borrow_mut();
+            evaluator.eval_str(&self.current_input)
+        };
+
+        match result {
             Ok(result) => {
                 let formatted = self.format_expr(&result);
                 self.history.push_back(ReplLine {

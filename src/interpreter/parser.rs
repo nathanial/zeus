@@ -82,4 +82,14 @@ impl Parser {
             Ok(expr)
         }
     }
+
+    pub fn parse_all(&mut self) -> Result<Vec<Expr>, String> {
+        let mut expressions = Vec::new();
+
+        while self.position < self.tokens.len() {
+            expressions.push(self.parse_expr()?);
+        }
+
+        Ok(expressions)
+    }
 }

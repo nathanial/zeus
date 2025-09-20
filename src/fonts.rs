@@ -1,4 +1,4 @@
-use raylib::consts::TextureFilter;
+use raylib::consts::{TextureFilter, TextureWrap};
 use raylib::prelude::*;
 use std::path::Path;
 
@@ -20,6 +20,8 @@ pub fn load_monospace_font(
             if let Ok(font) = rl.load_font_ex(thread, path, base_size, None) {
                 font.texture()
                     .set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_POINT);
+                font.texture()
+                    .set_texture_wrap(thread, TextureWrap::TEXTURE_WRAP_CLAMP);
                 return Some(font);
             }
         }

@@ -84,3 +84,15 @@ fn test_complex_expression() {
     let result = evaluator.eval_str("(+ (* x 2) y)").unwrap();
     assert_eq!(result, Expr::Integer(20));
 }
+
+#[test]
+fn test_eval_multiple_expressions() {
+    let mut evaluator = Evaluator::new();
+    let result = evaluator
+        .eval_str("(define x 5)\n(define y 7)\n(+ x y)")
+        .unwrap();
+    assert_eq!(result, Expr::Integer(12));
+
+    let x_value = evaluator.eval_str("x").unwrap();
+    assert_eq!(x_value, Expr::Integer(5));
+}

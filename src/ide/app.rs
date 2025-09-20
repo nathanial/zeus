@@ -211,8 +211,10 @@ impl IdeApp {
 
         // Draw status text
         let status_text = if let Some(focused_id) = self.state.layout_manager.get_focused_pane() {
-            format!("Focus: {} | Ctrl+1-5: Switch Panes | Tab: Cycle | Ctrl+E: Evaluate | F5: Refresh Files",
-                    focused_id)
+            format!(
+                "Focus: {} | Ctrl+1-5: Switch Panes | Tab: Cycle | Ctrl+E: Eval Form | Ctrl+Shift+E: Eval Buffer | F5: Refresh Files",
+                focused_id
+            )
         } else {
             "Zeus LISP IDE - Phase 1".to_string()
         };
