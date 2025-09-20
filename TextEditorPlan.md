@@ -1,10 +1,10 @@
 # Text Editor Feature Plan
 
 ## Core Editing
-- [ ] Undo and redo stack (multi-level history with keyboard shortcuts).
-- [ ] Persistent file I/O (open, save, save-as for workspace files).
-- [ ] Configurable indentation (smart indent, spaces vs tabs, auto-indent on newline).
-- [ ] Multi-line text selection with copy, cut, and paste clipboard support.
+- [x] Undo and redo stack (multi-level history with keyboard shortcuts).
+- [x] Persistent file I/O (open, save, save-as for workspace files).
+- [x] Configurable indentation (smart indent, spaces vs tabs, auto-indent on newline).
+- [x] Multi-line text selection with copy, cut, and paste clipboard support.
 
 ## Navigation and Search
 - [ ] Incremental find and replace with case sensitivity and regex options.
