@@ -8,22 +8,22 @@ use std::path::Path;
 const WINDOW_WIDTH: i32 = 900;
 const WINDOW_HEIGHT: i32 = 650;
 const BASE_FONT_SIZE: f32 = 18.0;
-const BASE_LINE_HEIGHT: f32 = 22.0;
-const BASE_PADDING: f32 = 15.0;
 const BASE_FONT_SPACING: f32 = 1.0;
 const BASE_TITLE_FONT_SIZE: f32 = 20.0;
 const BASE_HELP_FONT_SIZE: f32 = 14.0;
-const BASE_TITLE_BAR_HEIGHT: f32 = 35.0;
-const BASE_TITLE_TEXT_OFFSET_Y: f32 = 8.0;
-const BASE_HISTORY_START_Y: f32 = 45.0;
-const BASE_HISTORY_CLIP_TOP: f32 = 35.0;
-const BASE_HISTORY_MARGIN_BOTTOM: f32 = 100.0;
-const BASE_INPUT_AREA_OFFSET: f32 = 65.0;
-const BASE_INPUT_BOX_HEIGHT: f32 = 75.0;
-const BASE_INPUT_BOX_PADDING: f32 = 10.0;
-const BASE_PROMPT_OFFSET: f32 = 22.0;
-const BASE_HELP_OFFSET: f32 = 20.0;
-const BASE_CURSOR_WIDTH: f32 = 2.0;
+const BASE_LINE_HEIGHT: i32 = 22;
+const BASE_PADDING: i32 = 15;
+const BASE_TITLE_BAR_HEIGHT: i32 = 35;
+const BASE_TITLE_TEXT_OFFSET_Y: i32 = 8;
+const BASE_HISTORY_START_Y: i32 = 45;
+const BASE_HISTORY_CLIP_TOP: i32 = 35;
+const BASE_HISTORY_MARGIN_BOTTOM: i32 = 100;
+const BASE_INPUT_AREA_OFFSET: i32 = 65;
+const BASE_INPUT_BOX_HEIGHT: i32 = 75;
+const BASE_INPUT_BOX_PADDING: i32 = 10;
+const BASE_PROMPT_OFFSET: i32 = 22;
+const BASE_HELP_OFFSET: i32 = 20;
+const BASE_CURSOR_WIDTH: i32 = 2;
 const MAX_HISTORY: usize = 100;
 const INPUT_COLOR: Color = Color::WHITE;
 const OUTPUT_COLOR: Color = Color::new(100, 255, 100, 255);
@@ -76,24 +76,28 @@ pub fn run_ui() {
         .build();
 
     let dpi_scale = rl.get_window_scale_dpi();
-    let scale_factor = dpi_scale.x.max(dpi_scale.y).max(1.0);
-    let font_size = (BASE_FONT_SIZE * scale_factor).round() as i32;
-    let line_height = (BASE_LINE_HEIGHT * scale_factor).round() as i32;
-    let padding = (BASE_PADDING * scale_factor).round() as i32;
-    let font_spacing = BASE_FONT_SPACING * scale_factor;
-    let title_font_size = BASE_TITLE_FONT_SIZE * scale_factor;
-    let help_font_size = BASE_HELP_FONT_SIZE * scale_factor;
-    let title_bar_height = (BASE_TITLE_BAR_HEIGHT * scale_factor).round() as i32;
-    let title_text_offset = (BASE_TITLE_TEXT_OFFSET_Y * scale_factor).round() as i32;
-    let history_start_y = (BASE_HISTORY_START_Y * scale_factor).round() as i32;
-    let history_clip_top = (BASE_HISTORY_CLIP_TOP * scale_factor).round() as i32;
-    let history_margin_bottom = (BASE_HISTORY_MARGIN_BOTTOM * scale_factor).round() as i32;
-    let input_area_offset = (BASE_INPUT_AREA_OFFSET * scale_factor).round() as i32;
-    let input_box_height = (BASE_INPUT_BOX_HEIGHT * scale_factor).round() as i32;
-    let input_box_padding = (BASE_INPUT_BOX_PADDING * scale_factor).round() as i32;
-    let prompt_offset = (BASE_PROMPT_OFFSET * scale_factor).round() as i32;
-    let help_offset = (BASE_HELP_OFFSET * scale_factor).round() as i32;
-    let cursor_width = ((BASE_CURSOR_WIDTH * scale_factor).round() as i32).max(2);
+    let atlas_scale = dpi_scale.x.max(dpi_scale.y).max(1.0);
+    let atlas_font_size = (BASE_FONT_SIZE * atlas_scale).round() as i32;
+
+    let font_size = BASE_FONT_SIZE;
+    let font_size_i32 = font_size.round() as i32;
+    let font_spacing = BASE_FONT_SPACING;
+    let title_font_size = BASE_TITLE_FONT_SIZE;
+    let help_font_size = BASE_HELP_FONT_SIZE;
+
+    let line_height = BASE_LINE_HEIGHT;
+    let padding = BASE_PADDING;
+    let title_bar_height = BASE_TITLE_BAR_HEIGHT;
+    let title_text_offset = BASE_TITLE_TEXT_OFFSET_Y;
+    let history_start_y = BASE_HISTORY_START_Y;
+    let history_clip_top = BASE_HISTORY_CLIP_TOP;
+    let history_margin_bottom = BASE_HISTORY_MARGIN_BOTTOM;
+    let input_area_offset = BASE_INPUT_AREA_OFFSET;
+    let input_box_height = BASE_INPUT_BOX_HEIGHT;
+    let input_box_padding = BASE_INPUT_BOX_PADDING;
+    let prompt_offset = BASE_PROMPT_OFFSET;
+    let help_offset = BASE_HELP_OFFSET;
+    let cursor_width = BASE_CURSOR_WIDTH.max(2);
     let scroll_step = (line_height as f32 / 2.0).max(1.0);
 
     let mut evaluator = Evaluator::new();
@@ -125,7 +129,7 @@ pub fn run_ui() {
         is_error: false,
     });
 
-    let custom_font = load_monospace_font(&mut rl, &thread, font_size);
+    let custom_font = load_monospace_font(&mut rl, &thread, atlas_font_size);
     let fallback_font = rl.get_font_default();
     fallback_font
         .texture()
@@ -274,7 +278,7 @@ pub fn run_ui() {
                             font,
                             &line.text,
                             Vector2::new(padding as f32, y as f32),
-                            font_size as f32,
+                            font_size,
                             font_spacing,
                             color,
                         );
@@ -283,7 +287,7 @@ pub fn run_ui() {
                             &fallback_font,
                             &line.text,
                             Vector2::new(padding as f32, y as f32),
-                            font_size as f32,
+                            font_size,
                             font_spacing,
                             color,
                         );
@@ -308,7 +312,7 @@ pub fn run_ui() {
                 font,
                 "Input:",
                 Vector2::new(padding as f32, input_y as f32),
-                font_size as f32,
+                font_size,
                 font_spacing,
                 Color::GRAY,
             );
@@ -317,7 +321,7 @@ pub fn run_ui() {
                 &fallback_font,
                 "Input:",
                 Vector2::new(padding as f32, input_y as f32),
-                font_size as f32,
+                font_size,
                 font_spacing,
                 Color::GRAY,
             );
@@ -330,7 +334,7 @@ pub fn run_ui() {
                 font,
                 &prompt,
                 prompt_position,
-                font_size as f32,
+                font_size,
                 font_spacing,
                 INPUT_COLOR,
             );
@@ -339,7 +343,7 @@ pub fn run_ui() {
                 &fallback_font,
                 &prompt,
                 prompt_position,
-                font_size as f32,
+                font_size,
                 font_spacing,
                 INPUT_COLOR,
             );
@@ -348,16 +352,16 @@ pub fn run_ui() {
         // Draw cursor
         if cursor_visible {
             let prompt_metrics = if let Some(font) = font_ref {
-                font.measure_text(&prompt, font_size as f32, font_spacing)
+                font.measure_text(&prompt, font_size, font_spacing)
             } else {
-                fallback_font.measure_text(&prompt, font_size as f32, font_spacing)
+                fallback_font.measure_text(&prompt, font_size, font_spacing)
             };
             let cursor_x = (padding as f32 + prompt_metrics.x).round() as i32;
             d.draw_rectangle(
                 cursor_x,
                 input_y + prompt_offset,
                 cursor_width,
-                font_size,
+                font_size_i32,
                 INPUT_COLOR,
             );
         }
