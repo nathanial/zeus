@@ -1,4 +1,5 @@
 use crate::interpreter::evaluator::Evaluator;
+use raylib::consts::ConfigFlags;
 use raylib::core::text::RaylibFont;
 use raylib::prelude::*;
 use std::collections::VecDeque;
@@ -50,6 +51,11 @@ fn load_monospace_font(
 }
 
 pub fn run_ui() {
+    // Request a high-DPI backbuffer before creating the window so text stays crisp.
+    unsafe {
+        raylib::ffi::SetConfigFlags(ConfigFlags::FLAG_WINDOW_HIGHDPI as u32);
+    }
+
     let (mut rl, thread) = raylib::init()
         .size(WINDOW_WIDTH, WINDOW_HEIGHT)
         .title("Zeus LISP - Graphical REPL")
