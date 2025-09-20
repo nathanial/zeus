@@ -42,18 +42,23 @@ impl LayoutManager {
         Self {
             root: LayoutNode::Split {
                 direction: SplitDirection::Horizontal,
-                ratio: 0.7,
-                first: Box::new(LayoutNode::Split {
-                    direction: SplitDirection::Vertical,
-                    ratio: 0.7,
-                    first: Box::new(LayoutNode::Leaf("editor".to_string())),
-                    second: Box::new(LayoutNode::Leaf("repl".to_string())),
-                }),
+                ratio: 0.2,  // File tree takes 20% of width
+                first: Box::new(LayoutNode::Leaf("file_tree".to_string())),
                 second: Box::new(LayoutNode::Split {
-                    direction: SplitDirection::Vertical,
-                    ratio: 0.5,
-                    first: Box::new(LayoutNode::Leaf("symbols".to_string())),
-                    second: Box::new(LayoutNode::Leaf("inspector".to_string())),
+                    direction: SplitDirection::Horizontal,
+                    ratio: 0.625,  // Adjusted to maintain proportions
+                    first: Box::new(LayoutNode::Split {
+                        direction: SplitDirection::Vertical,
+                        ratio: 0.7,
+                        first: Box::new(LayoutNode::Leaf("editor".to_string())),
+                        second: Box::new(LayoutNode::Leaf("repl".to_string())),
+                    }),
+                    second: Box::new(LayoutNode::Split {
+                        direction: SplitDirection::Vertical,
+                        ratio: 0.5,
+                        first: Box::new(LayoutNode::Leaf("symbols".to_string())),
+                        second: Box::new(LayoutNode::Leaf("inspector".to_string())),
+                    }),
                 }),
             },
             pane_bounds: HashMap::new(),

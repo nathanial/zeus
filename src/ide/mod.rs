@@ -1,5 +1,6 @@
 pub mod app;
 pub mod editor;
+pub mod file_tree;
 pub mod fonts;
 pub mod ide_state;
 pub mod inspector;

@@ -1,3 +1,5 @@
+use crate::ide::editor::EditorPane;
+use crate::ide::file_tree::FileTreePane;
 use crate::ide::fonts::IdeFonts;
 use crate::ide::ide_state::IdeState;
 use raylib::prelude::*;
@@ -74,20 +76,24 @@ impl IdeApp {
             || self.rl.is_key_down(KeyboardKey::KEY_LEFT_SUPER);
 
         if is_ctrl_or_cmd {
-            // Ctrl/Cmd+1: Focus editor
+            // Ctrl/Cmd+1: Focus file tree
             if self.rl.is_key_pressed(KeyboardKey::KEY_ONE) {
+                self.state.focus_pane("file_tree".to_string());
+            }
+            // Ctrl/Cmd+2: Focus editor
+            else if self.rl.is_key_pressed(KeyboardKey::KEY_TWO) {
                 self.state.focus_pane("editor".to_string());
             }
-            // Ctrl/Cmd+2: Focus REPL
-            else if self.rl.is_key_pressed(KeyboardKey::KEY_TWO) {
+            // Ctrl/Cmd+3: Focus REPL
+            else if self.rl.is_key_pressed(KeyboardKey::KEY_THREE) {
                 self.state.focus_pane("repl".to_string());
             }
-            // Ctrl/Cmd+3: Focus symbols
-            else if self.rl.is_key_pressed(KeyboardKey::KEY_THREE) {
+            // Ctrl/Cmd+4: Focus symbols
+            else if self.rl.is_key_pressed(KeyboardKey::KEY_FOUR) {
                 self.state.focus_pane("symbols".to_string());
             }
-            // Ctrl/Cmd+4: Focus inspector
-            else if self.rl.is_key_pressed(KeyboardKey::KEY_FOUR) {
+            // Ctrl/Cmd+5: Focus inspector
+            else if self.rl.is_key_pressed(KeyboardKey::KEY_FIVE) {
                 self.state.focus_pane("inspector".to_string());
             }
             // Ctrl/Cmd+U: Update symbol browser
@@ -149,6 +155,22 @@ impl IdeApp {
             };
             self.state.layout_manager.calculate_bounds(window_bounds);
         }
+
+        // Check if file tree has a file to open
+        if let Some(pane) = self.state.panes.get_mut("file_tree") {
+            if let Some(file_tree) = pane.as_any_mut().downcast_mut::<FileTreePane>() {
+                if let Some(path) = file_tree.take_file_to_open() {
+                    // Load the file into the editor
+                    if let Some(editor_pane) = self.state.panes.get_mut("editor") {
+                        if let Some(editor) = editor_pane.as_any_mut().downcast_mut::<EditorPane>() {
+                            editor.load_file_from_path(path);
+                            // Focus the editor after loading a file
+                            self.state.focus_pane("editor".to_string());
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn draw(&mut self) {
@@ -185,7 +207,7 @@ impl IdeApp {
 
         // Draw status text
         let status_text = if let Some(focused_id) = self.state.layout_manager.get_focused_pane() {
-            format!("Focus: {} | Ctrl+1-4: Switch Panes | Tab: Cycle | Ctrl+E: Evaluate | Ctrl+U: Update Symbols",
+            format!("Focus: {} | Ctrl+1-5: Switch Panes | Tab: Cycle | Ctrl+E: Evaluate | F5: Refresh Files",
                     focused_id)
         } else {
             "Zeus LISP IDE - Phase 1".to_string()

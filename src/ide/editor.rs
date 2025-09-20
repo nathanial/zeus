@@ -91,6 +91,10 @@ impl EditorPane {
         pane
     }
 
+    pub fn load_file_from_path(&mut self, path: PathBuf) {
+        self.load_file(path);
+    }
+
     fn capture_initial_state(&mut self) {
         self.undo_stack.clear();
         self.redo_stack.clear();

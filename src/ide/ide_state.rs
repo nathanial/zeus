@@ -1,4 +1,5 @@
 use crate::ide::editor::EditorPane;
+use crate::ide::file_tree::FileTreePane;
 use crate::ide::inspector::InspectorPane;
 use crate::ide::layout::LayoutManager;
 use crate::ide::pane::Pane;
@@ -22,6 +23,11 @@ impl IdeState {
         let mut panes: HashMap<String, Box<dyn Pane>> = HashMap::new();
 
         // Create panes
+        panes.insert(
+            "file_tree".to_string(),
+            Box::new(FileTreePane::new("file_tree".to_string())),
+        );
+
         panes.insert(
             "editor".to_string(),
             Box::new(EditorPane::new("editor".to_string())),
