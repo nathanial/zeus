@@ -5,6 +5,7 @@ use crate::interpreter::{
     types::{EvalError, EvalResult, Expr, HashKey, SymbolData},
 };
 
+#[derive(Clone)]
 pub struct Evaluator {
     pub environment: Environment,
 }
@@ -14,6 +15,10 @@ impl Evaluator {
         let mut env = Environment::new();
         env.define_builtins();
         Evaluator { environment: env }
+    }
+
+    pub fn get_environment(&self) -> &Environment {
+        &self.environment
     }
 
     pub fn parse(input: &str) -> Result<Expr, String> {

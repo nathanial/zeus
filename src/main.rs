@@ -1,6 +1,7 @@
 pub mod interpreter;
 pub mod tests;
 pub mod ui;
+pub mod ide;
 
 use crate::interpreter::repl::Repl;
 use std::env;
@@ -13,7 +14,12 @@ fn main() {
     if args.len() > 1 {
         match args[1].as_str() {
             "-ui" => {
-                // Launch UI mode
+                // Launch IDE mode (Phase 1)
+                let mut app = ide::IdeApp::new();
+                app.run();
+            }
+            "-ui-old" => {
+                // Launch old UI mode
                 ui::run_ui();
             }
             "--load" => {

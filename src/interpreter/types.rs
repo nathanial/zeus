@@ -31,6 +31,10 @@ impl SymbolData {
         }
     }
 
+    pub fn as_str(&self) -> &str {
+        self.name()
+    }
+
     pub fn is_keyword(&self) -> bool {
         matches!(self, SymbolData::Keyword(_))
     }

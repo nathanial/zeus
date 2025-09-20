@@ -1,6 +1,7 @@
 use crate::interpreter::types::{Expr, SymbolData};
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub struct Environment {
     scopes: Vec<HashMap<String, Expr>>,
     symbol_properties: HashMap<String, HashMap<String, Expr>>,
@@ -157,5 +158,18 @@ impl Environment {
             format!("{}{}", prefix, id)
         };
         SymbolData::Uninterned(name, id)
+    }
+
+    pub fn get_all_bindings(&self) -> HashMap<String, Expr> {
+        let mut all_bindings = HashMap::new();
+
+        // Iterate through scopes from global to local
+        for scope in &self.scopes {
+            for (key, value) in scope {
+                all_bindings.insert(key.clone(), value.clone());
+            }
+        }
+
+        all_bindings
     }
 }
