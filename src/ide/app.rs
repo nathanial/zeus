@@ -9,6 +9,7 @@ const WINDOW_HEIGHT: i32 = 800;
 const MIN_WINDOW_WIDTH: i32 = 800;
 const MIN_WINDOW_HEIGHT: i32 = 600;
 const IDE_ATLAS_BASE_SIZE: f32 = 16.0;
+const STATUS_BAR_HEIGHT: f32 = 25.0;
 
 pub struct IdeApp {
     rl: RaylibHandle,
@@ -52,11 +53,12 @@ impl IdeApp {
 
     pub fn run(&mut self) {
         // Initial layout calculation
+        let available_height = (self.rl.get_screen_height() as f32 - STATUS_BAR_HEIGHT).max(0.0);
         let window_bounds = Rectangle {
             x: 0.0,
             y: 0.0,
             width: self.rl.get_screen_width() as f32,
-            height: self.rl.get_screen_height() as f32,
+            height: available_height,
         };
         self.state.layout_manager.calculate_bounds(window_bounds);
 
@@ -147,11 +149,13 @@ impl IdeApp {
     fn update(&mut self) {
         // Update layout if window was resized
         if self.rl.is_window_resized() {
+            let available_height =
+                (self.rl.get_screen_height() as f32 - STATUS_BAR_HEIGHT).max(0.0);
             let window_bounds = Rectangle {
                 x: 0.0,
                 y: 0.0,
                 width: self.rl.get_screen_width() as f32,
-                height: self.rl.get_screen_height() as f32,
+                height: available_height,
             };
             self.state.layout_manager.calculate_bounds(window_bounds);
         }
@@ -193,16 +197,15 @@ impl IdeApp {
         }
 
         // Draw status bar
-        let status_height = 25.0;
         let screen_width = d.get_screen_width() as f32;
         let screen_height = d.get_screen_height() as f32;
-        let status_y = screen_height - status_height;
+        let status_y = screen_height - STATUS_BAR_HEIGHT;
 
         d.draw_rectangle(
             0,
             status_y as i32,
             screen_width as i32,
-            status_height as i32,
+            STATUS_BAR_HEIGHT as i32,
             self.state.theme.panel,
         );
 
