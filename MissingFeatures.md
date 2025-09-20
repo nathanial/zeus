@@ -8,10 +8,11 @@ This document outlines the features that Zeus currently lacks compared to a full
 - [x] `let` and `let*` - Local variable bindings ✅
 - [ ] `letrec` - Recursive local bindings
 - [x] `cond` - Multi-branch conditional ✅
-- [ ] `case` - Value-based branching
+- [x] `case` - Value-based branching ✅
 - [x] `and` / `or` - Logical operators with short-circuit evaluation ✅
-- [ ] `when` / `unless` - Single-branch conditionals
-- [ ] `progn` / `begin` - Sequential evaluation
+- [x] `when` / `unless` - Single-branch conditionals ✅
+- [x] `progn` - Sequential evaluation ✅
+- [ ] `begin` - Alias for progn
 - [ ] `do` / `loop` - Iteration constructs
 - [ ] `catch` / `throw` - Non-local control transfer
 - [ ] `unwind-protect` - Cleanup guarantees
@@ -41,18 +42,20 @@ This document outlines the features that Zeus currently lacks compared to a full
 - [x] `reverse` - List reversal ✅
 - [x] `length` - List/sequence length ✅
 - [x] `nth` - N-th element access ✅
-- [ ] `nthcdr` - N-th cdr access
-- [ ] `member` / `assoc` - List searching
-- [ ] `mapcar` / `maplist` - List mapping
-- [ ] `reduce` - List reduction
-- [ ] `filter` / `remove` - List filtering
+- [x] `nthcdr` - N-th cdr access ✅
+- [x] `member` - List searching ✅
+- [ ] `assoc` - Association list lookup
+- [x] `mapcar` - List mapping ✅
+- [ ] `maplist` - List mapping with cdrs
+- [x] `reduce` - List reduction ✅
+- [x] `filter` / `remove` - List filtering ✅
 - [ ] `sort` - List sorting
 - [ ] `subseq` - Subsequence extraction
 - [ ] Destructive operations (`nconc`, `rplaca`, `rplacd`)
 
 ### Functions & Closures
-- [ ] `funcall` - Explicit function call
-- [ ] `apply` - Apply function to list of arguments
+- [x] `funcall` - Explicit function call ✅
+- [x] `apply` - Apply function to list of arguments ✅
 - [ ] `&optional` - Optional parameters
 - [ ] `&rest` - Variable number of arguments
 - [ ] `&key` - Keyword parameters
@@ -90,7 +93,8 @@ This document outlines the features that Zeus currently lacks compared to a full
 
 ### I/O & Formatting
 - [ ] `read` - Read S-expressions
-- [ ] `print` / `prin1` / `princ` - Output functions
+- [x] `print` / `println` - Basic output functions ✅
+- [ ] `prin1` / `princ` - Formatted output
 - [ ] `format` - Formatted output
 - [ ] `with-open-file` - File handling
 - [ ] Pretty printing

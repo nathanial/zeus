@@ -612,4 +612,231 @@ mod tests {
 
         assert_eq!(eval_to_number("(length (append (list 1 2) (list 3 4 5)))"), 5.0);
     }
+
+    // Tests for new features
+    #[test]
+    fn test_progn() {
+        assert_eq!(eval_to_list("(progn)"), vec![]);
+        assert_eq!(eval_to_number("(progn 1 2 3)"), 3.0);
+
+        let mut evaluator = Evaluator::new();
+        evaluator.eval_str("(progn (define x 10) (define y 20))").unwrap();
+        assert_eq!(evaluator.eval_str("(+ x y)").unwrap(), Expr::Number(30.0));
+    }
+
+    #[test]
+    fn test_when() {
+        assert_eq!(eval_to_number("(when 1 10)"), 10.0);
+        assert_eq!(eval_to_list("(when 0 10)"), vec![]);
+        assert_eq!(eval_to_number("(when (> 5 3) (+ 1 2) (* 3 4))"), 12.0);
+    }
+
+    #[test]
+    fn test_unless() {
+        assert_eq!(eval_to_list("(unless 1 10)"), vec![]);
+        assert_eq!(eval_to_number("(unless 0 10)"), 10.0);
+        assert_eq!(eval_to_number("(unless (< 5 3) (+ 1 2) (* 3 4))"), 12.0);
+    }
+
+    #[test]
+    fn test_case() {
+        assert_eq!(eval_to_number("(case 2 (1 10) (2 20) (3 30))"), 20.0);
+        assert_eq!(eval_to_number("(case 5 (1 10) (2 20) (else 30))"), 30.0);
+        assert_eq!(eval_to_list("(case 5 (1 10) (2 20) (3 30))"), vec![]);
+
+        // Test with list of values
+        assert_eq!(eval_to_number("(case 2 ((1 2 3) 100) (4 200))"), 100.0);
+    }
+
+    #[test]
+    fn test_case_string() {
+        assert_eq!(eval_to_string("(case \"b\" (\"a\" \"first\") (\"b\" \"second\") (else \"other\"))"), "second");
+    }
+
+    #[test]
+    fn test_nthcdr() {
+        let result = eval_to_list("(nthcdr 2 (list 1 2 3 4 5))");
+        assert_eq!(result, vec![
+            Expr::Number(3.0), Expr::Number(4.0), Expr::Number(5.0)
+        ]);
+
+        assert_eq!(eval_to_list("(nthcdr 0 (list 1 2 3))"),
+            vec![Expr::Number(1.0), Expr::Number(2.0), Expr::Number(3.0)]);
+        assert_eq!(eval_to_list("(nthcdr 5 (list 1 2 3))"), vec![]);
+    }
+
+    #[test]
+    fn test_mapcar() {
+        let result = eval_to_list("(mapcar (lambda (x) (* x 2)) (list 1 2 3))");
+        assert_eq!(result, vec![
+            Expr::Number(2.0), Expr::Number(4.0), Expr::Number(6.0)
+        ]);
+
+        // Test with multiple lists
+        let result = eval_to_list("(mapcar + (list 1 2 3) (list 10 20 30))");
+        assert_eq!(result, vec![
+            Expr::Number(11.0), Expr::Number(22.0), Expr::Number(33.0)
+        ]);
+
+        // Test with lists of different lengths (stops at shortest)
+        let result = eval_to_list("(mapcar + (list 1 2) (list 10 20 30))");
+        assert_eq!(result, vec![
+            Expr::Number(11.0), Expr::Number(22.0)
+        ]);
+    }
+
+    #[test]
+    fn test_filter() {
+        let result = eval_to_list("(filter (lambda (x) (> x 2)) (list 1 2 3 4))");
+        assert_eq!(result, vec![
+            Expr::Number(3.0), Expr::Number(4.0)
+        ]);
+
+        // We don't have mod function yet, so let's use a simpler test
+        let result = eval_to_list("(filter (lambda (x) (> x 0)) (list -2 -1 0 1 2))");
+        assert_eq!(result, vec![
+            Expr::Number(1.0), Expr::Number(2.0)
+        ]);
+    }
+
+    #[test]
+    fn test_remove() {
+        let result = eval_to_list("(remove (lambda (x) (> x 2)) (list 1 2 3 4))");
+        assert_eq!(result, vec![
+            Expr::Number(1.0), Expr::Number(2.0)
+        ]);
+
+        let result = eval_to_list("(remove (lambda (x) (< x 0)) (list -2 -1 0 1 2))");
+        assert_eq!(result, vec![
+            Expr::Number(0.0), Expr::Number(1.0), Expr::Number(2.0)
+        ]);
+    }
+
+    #[test]
+    fn test_member() {
+        let result = eval_to_list("(member 3 (list 1 2 3 4 5))");
+        assert_eq!(result, vec![
+            Expr::Number(3.0), Expr::Number(4.0), Expr::Number(5.0)
+        ]);
+
+        assert_eq!(eval_to_list("(member 10 (list 1 2 3))"), vec![]);
+
+        let result = eval_to_list("(member \"b\" (list \"a\" \"b\" \"c\"))");
+        assert_eq!(result, vec![
+            Expr::String("b".to_string()),
+            Expr::String("c".to_string())
+        ]);
+    }
+
+    #[test]
+    fn test_reduce() {
+        assert_eq!(eval_to_number("(reduce + (list 1 2 3 4))"), 10.0);
+        assert_eq!(eval_to_number("(reduce * (list 1 2 3 4))"), 24.0);
+
+        // With initial value
+        assert_eq!(eval_to_number("(reduce + (list 1 2 3) 10)"), 16.0);
+
+        // With lambda
+        assert_eq!(eval_to_number("(reduce (lambda (x y) (+ x (* y 2))) (list 1 2 3) 0)"), 12.0);
+
+        // Empty list with initial value
+        assert_eq!(eval_to_number("(reduce + (list) 42)"), 42.0);
+    }
+
+    #[test]
+    fn test_reduce_empty_error() {
+        let result = Evaluator::eval_once("(reduce + (list))");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("empty list"));
+    }
+
+    #[test]
+    fn test_apply() {
+        assert_eq!(eval_to_number("(apply + (list 1 2 3))"), 6.0);
+        assert_eq!(eval_to_number("(apply * (list 2 3 4))"), 24.0);
+
+        // With lambda
+        assert_eq!(eval_to_number("(apply (lambda (x y) (* x y)) (list 3 4))"), 12.0);
+    }
+
+    #[test]
+    fn test_funcall() {
+        assert_eq!(eval_to_number("(funcall + 1 2 3)"), 6.0);
+        assert_eq!(eval_to_number("(funcall * 2 3 4)"), 24.0);
+
+        // With lambda
+        assert_eq!(eval_to_number("(funcall (lambda (x y) (* x y)) 3 4)"), 12.0);
+    }
+
+    #[test]
+    fn test_print_println() {
+        // These functions are harder to test since they produce output
+        // We can at least verify they return the correct value
+        let mut evaluator = Evaluator::new();
+
+        // print returns last arg or empty list
+        let result = evaluator.eval_str("(print \"hello\" \" \" \"world\")").unwrap();
+        assert_eq!(result, Expr::String("world".to_string()));
+
+        let result = evaluator.eval_str("(println \"hello\")").unwrap();
+        assert_eq!(result, Expr::String("hello".to_string()));
+
+        let result = evaluator.eval_str("(print)").unwrap();
+        assert_eq!(result, Expr::List(vec![]));
+    }
+
+    #[test]
+    fn test_complex_mapcar() {
+        let mut evaluator = Evaluator::new();
+        evaluator.eval_str("(define square (lambda (x) (* x x)))").unwrap();
+        let result = evaluator.eval_str("(mapcar square (list 1 2 3 4))").unwrap();
+        assert_eq!(result, Expr::List(vec![
+            Expr::Number(1.0), Expr::Number(4.0),
+            Expr::Number(9.0), Expr::Number(16.0)
+        ]));
+    }
+
+    #[test]
+    fn test_nested_higher_order() {
+        // Combining multiple higher-order functions
+        let result = eval_to_list("(mapcar (lambda (x) (* x 2)) (filter (lambda (x) (> x 2)) (list 1 2 3 4 5)))");
+        assert_eq!(result, vec![
+            Expr::Number(6.0), Expr::Number(8.0), Expr::Number(10.0)
+        ]);
+
+        // Reduce the mapped result
+        assert_eq!(eval_to_number(
+            "(reduce + (mapcar (lambda (x) (* x 2)) (list 1 2 3)))"
+        ), 12.0);
+    }
+
+    #[test]
+    fn test_apply_with_funcall() {
+        assert_eq!(eval_to_number("(funcall apply + (list 1 2 3))"), 6.0);
+        assert_eq!(eval_to_number("(apply funcall (list + 1 2 3))"), 6.0);
+    }
+
+    #[test]
+    fn test_progn_in_conditionals() {
+        assert_eq!(eval_to_number(
+            "(if 1 (progn (define x 10) (+ x 5)) 0)"
+        ), 15.0);
+
+        assert_eq!(eval_to_number(
+            "(when (> 3 2) (define y 20) (+ y 10))"
+        ), 30.0);
+    }
+
+    #[test]
+    fn test_case_with_expressions() {
+        let mut evaluator = Evaluator::new();
+        evaluator.eval_str("(define x 2)").unwrap();
+        let result = evaluator.eval_str(
+            "(case x
+               (1 \"one\")
+               (2 (progn (define y 10) (+ y 5)))
+               (else \"other\"))"
+        ).unwrap();
+        assert_eq!(result, Expr::Number(15.0));
+    }
 }
