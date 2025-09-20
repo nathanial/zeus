@@ -1,34 +1,42 @@
 use crate::interpreter::evaluator::Evaluator;
-use crate::interpreter::types::Expr;
+use crate::interpreter::types::{EvalError, EvalResult, Expr};
 
 impl Evaluator {
-    pub fn builtin_nth(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    pub fn builtin_nth(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 2 {
-            return Err("nth requires exactly 2 arguments".to_string());
+            return Err(EvalError::message("nth requires exactly 2 arguments"));
         }
 
         let index = match &args[0] {
             Expr::Number(n) if *n >= 0.0 && n.fract() == 0.0 => *n as usize,
-            _ => return Err("nth index must be a non-negative integer".to_string()),
+            _ => {
+                return Err(EvalError::message(
+                    "nth index must be a non-negative integer",
+                ))
+            }
         };
 
         match &args[1] {
-            Expr::List(list) => list
+            Expr::List(list) => Ok(list
                 .get(index)
                 .cloned()
-                .ok_or_else(|| "nth index out of bounds".to_string()),
-            _ => Err("nth requires a list as second argument".to_string()),
+                .ok_or_else(|| EvalError::message("nth index out of bounds"))?),
+            _ => Err(EvalError::message("nth requires a list as second argument")),
         }
     }
 
-    pub fn builtin_nthcdr(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    pub fn builtin_nthcdr(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 2 {
-            return Err("nthcdr requires exactly 2 arguments".to_string());
+            return Err(EvalError::message("nthcdr requires exactly 2 arguments"));
         }
 
         let n = match &args[0] {
             Expr::Number(num) if *num >= 0.0 && num.fract() == 0.0 => *num as usize,
-            _ => return Err("nthcdr index must be a non-negative integer".to_string()),
+            _ => {
+                return Err(EvalError::message(
+                    "nthcdr index must be a non-negative integer",
+                ))
+            }
         };
 
         match &args[1] {
@@ -39,19 +47,25 @@ impl Evaluator {
                     Ok(Expr::List(list[n..].to_vec()))
                 }
             }
-            _ => Err("nthcdr requires a list as second argument".to_string()),
+            _ => Err(EvalError::message(
+                "nthcdr requires a list as second argument",
+            )),
         }
     }
 
-    pub fn builtin_member(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    pub fn builtin_member(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 2 {
-            return Err("member requires exactly 2 arguments".to_string());
+            return Err(EvalError::message("member requires exactly 2 arguments"));
         }
 
         let item = &args[0];
         let list = match &args[1] {
             Expr::List(l) => l,
-            _ => return Err("member requires a list as second argument".to_string()),
+            _ => {
+                return Err(EvalError::message(
+                    "member requires a list as second argument",
+                ))
+            }
         };
 
         for (i, elem) in list.iter().enumerate() {
@@ -63,19 +77,19 @@ impl Evaluator {
         Ok(Expr::List(vec![])) // Not found returns empty list
     }
 
-    pub fn builtin_mapcar(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    pub fn builtin_mapcar(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() < 2 {
-            return Err("mapcar requires at least 2 arguments".to_string());
+            return Err(EvalError::message("mapcar requires at least 2 arguments"));
         }
 
         let func = &args[0];
-        let lists: Vec<&Vec<Expr>> = args[1..]
-            .iter()
-            .map(|arg| match arg {
-                Expr::List(l) => Ok(l),
-                _ => Err("mapcar requires list arguments"),
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut lists: Vec<&Vec<Expr>> = Vec::new();
+        for arg in &args[1..] {
+            match arg {
+                Expr::List(l) => lists.push(l),
+                _ => return Err(EvalError::message("mapcar requires list arguments")),
+            }
+        }
 
         if lists.is_empty() {
             return Ok(Expr::List(vec![]));
@@ -94,7 +108,11 @@ impl Evaluator {
                 {
                     self.apply_lambda(lambda, &func_args)?
                 }
-                _ => return Err("mapcar requires a function as first argument".to_string()),
+                _ => {
+                    return Err(EvalError::message(
+                        "mapcar requires a function as first argument",
+                    ))
+                }
             };
             result.push(val);
         }
@@ -102,15 +120,19 @@ impl Evaluator {
         Ok(Expr::List(result))
     }
 
-    pub fn builtin_filter(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    pub fn builtin_filter(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 2 {
-            return Err("filter requires exactly 2 arguments".to_string());
+            return Err(EvalError::message("filter requires exactly 2 arguments"));
         }
 
         let pred = &args[0];
         let list = match &args[1] {
             Expr::List(l) => l,
-            _ => return Err("filter requires a list as second argument".to_string()),
+            _ => {
+                return Err(EvalError::message(
+                    "filter requires a list as second argument",
+                ))
+            }
         };
 
         let mut result = Vec::new();
@@ -122,7 +144,7 @@ impl Evaluator {
                 {
                     self.apply_lambda(lambda, &[item.clone()])?
                 }
-                _ => return Err("filter requires a predicate function".to_string()),
+                _ => return Err(EvalError::message("filter requires a predicate function")),
             };
 
             let is_true = match test_result {
@@ -139,15 +161,19 @@ impl Evaluator {
         Ok(Expr::List(result))
     }
 
-    pub fn builtin_remove(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    pub fn builtin_remove(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 2 {
-            return Err("remove requires exactly 2 arguments".to_string());
+            return Err(EvalError::message("remove requires exactly 2 arguments"));
         }
 
         let pred = &args[0];
         let list = match &args[1] {
             Expr::List(l) => l,
-            _ => return Err("remove requires a list as second argument".to_string()),
+            _ => {
+                return Err(EvalError::message(
+                    "remove requires a list as second argument",
+                ))
+            }
         };
 
         let mut result = Vec::new();
@@ -159,7 +185,7 @@ impl Evaluator {
                 {
                     self.apply_lambda(lambda, &[item.clone()])?
                 }
-                _ => return Err("remove requires a predicate function".to_string()),
+                _ => return Err(EvalError::message("remove requires a predicate function")),
             };
 
             let is_true = match test_result {
@@ -177,22 +203,28 @@ impl Evaluator {
         Ok(Expr::List(result))
     }
 
-    pub fn builtin_reduce(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    pub fn builtin_reduce(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() < 2 || args.len() > 3 {
-            return Err("reduce requires 2 or 3 arguments".to_string());
+            return Err(EvalError::message("reduce requires 2 or 3 arguments"));
         }
 
         let func = &args[0];
         let list = match &args[1] {
             Expr::List(l) => l,
-            _ => return Err("reduce requires a list as second argument".to_string()),
+            _ => {
+                return Err(EvalError::message(
+                    "reduce requires a list as second argument",
+                ))
+            }
         };
 
         if list.is_empty() {
             if args.len() == 3 {
                 return Ok(args[2].clone()); // Return initial value
             } else {
-                return Err("reduce of empty list with no initial value".to_string());
+                return Err(EvalError::message(
+                    "reduce of empty list with no initial value",
+                ));
             }
         }
 
@@ -210,22 +242,30 @@ impl Evaluator {
                 {
                     self.apply_lambda(lambda, &[acc, item.clone()])?
                 }
-                _ => return Err("reduce requires a function as first argument".to_string()),
+                _ => {
+                    return Err(EvalError::message(
+                        "reduce requires a function as first argument",
+                    ))
+                }
             };
         }
 
         Ok(acc)
     }
 
-    pub fn builtin_apply(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    pub fn builtin_apply(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 2 {
-            return Err("apply requires exactly 2 arguments".to_string());
+            return Err(EvalError::message("apply requires exactly 2 arguments"));
         }
 
         let func = &args[0];
         let list_args = match &args[1] {
             Expr::List(l) => l.clone(),
-            _ => return Err("apply requires a list as second argument".to_string()),
+            _ => {
+                return Err(EvalError::message(
+                    "apply requires a list as second argument",
+                ))
+            }
         };
 
         match func {
@@ -235,13 +275,15 @@ impl Evaluator {
             {
                 self.apply_lambda(lambda, &list_args)
             }
-            _ => Err("apply requires a function as first argument".to_string()),
+            _ => Err(EvalError::message(
+                "apply requires a function as first argument",
+            )),
         }
     }
 
-    pub fn builtin_funcall(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    pub fn builtin_funcall(&mut self, args: &[Expr]) -> EvalResult {
         if args.is_empty() {
-            return Err("funcall requires at least 1 argument".to_string());
+            return Err(EvalError::message("funcall requires at least 1 argument"));
         }
 
         let func = &args[0];
@@ -254,11 +296,13 @@ impl Evaluator {
             {
                 self.apply_lambda(lambda, func_args)
             }
-            _ => Err("funcall requires a function as first argument".to_string()),
+            _ => Err(EvalError::message(
+                "funcall requires a function as first argument",
+            )),
         }
     }
 
-    pub fn builtin_print(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    pub fn builtin_print(&mut self, args: &[Expr]) -> EvalResult {
         use std::io::{self, Write};
         for arg in args {
             print!("{}", self.format_expr_for_print(arg));
@@ -267,7 +311,7 @@ impl Evaluator {
         Ok(args.last().cloned().unwrap_or(Expr::List(vec![])))
     }
 
-    pub fn builtin_println(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    pub fn builtin_println(&mut self, args: &[Expr]) -> EvalResult {
         for arg in args {
             println!("{}", self.format_expr_for_print(arg));
         }
@@ -293,14 +337,14 @@ impl Evaluator {
         }
     }
 
-    pub fn apply_lambda(&mut self, lambda: &[Expr], args: &[Expr]) -> Result<Expr, String> {
+    pub fn apply_lambda(&mut self, lambda: &[Expr], args: &[Expr]) -> EvalResult {
         if let Expr::List(params) = &lambda[1] {
             if params.len() != args.len() {
-                return Err(format!(
+                return Err(EvalError::message(format!(
                     "Lambda expects {} arguments, got {}",
                     params.len(),
                     args.len()
-                ));
+                )));
             }
 
             self.environment.push_scope();
@@ -310,7 +354,7 @@ impl Evaluator {
                     self.environment.set(name.clone(), arg.clone());
                 } else {
                     self.environment.pop_scope();
-                    return Err("Lambda parameters must be symbols".to_string());
+                    return Err(EvalError::message("Lambda parameters must be symbols"));
                 }
             }
 
@@ -318,7 +362,7 @@ impl Evaluator {
             self.environment.pop_scope();
             result
         } else {
-            Err("Lambda parameters must be a list".to_string())
+            Err(EvalError::message("Lambda parameters must be a list"))
         }
     }
 }

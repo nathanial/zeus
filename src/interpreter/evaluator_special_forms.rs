@@ -1,10 +1,11 @@
 use crate::interpreter::evaluator::Evaluator;
-use crate::interpreter::types::Expr;
+use crate::interpreter::types::{EvalError, EvalResult, Expr};
+use std::collections::HashMap;
 
 impl Evaluator {
-    pub fn eval_cond(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    pub fn eval_cond(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() < 2 {
-            return Err("cond requires at least 1 clause".to_string());
+            return Err(EvalError::message("cond requires at least 1 clause"));
         }
 
         for clause in &list[1..] {
@@ -57,7 +58,7 @@ impl Evaluator {
                         return result;
                     }
                 }
-                _ => return Err("cond clause must be a non-empty list".to_string()),
+                _ => return Err(EvalError::message("cond clause must be a non-empty list")),
             }
         }
 
@@ -65,7 +66,7 @@ impl Evaluator {
         Ok(Expr::List(vec![]))
     }
 
-    pub fn eval_and(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    pub fn eval_and(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() == 1 {
             return Ok(Expr::Number(1.0)); // (and) with no args returns true
         }
@@ -87,7 +88,7 @@ impl Evaluator {
         Ok(result) // Return last value if all are truthy
     }
 
-    pub fn eval_or(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    pub fn eval_or(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() == 1 {
             return Ok(Expr::Number(0.0)); // (or) with no args returns false
         }
@@ -108,7 +109,7 @@ impl Evaluator {
         Ok(Expr::Number(0.0)) // All were falsy
     }
 
-    pub fn eval_progn(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    pub fn eval_progn(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() == 1 {
             return Ok(Expr::List(vec![])); // (progn) with no args returns nil
         }
@@ -123,9 +124,9 @@ impl Evaluator {
         result
     }
 
-    pub fn eval_when(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    pub fn eval_when(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() < 2 {
-            return Err("when requires at least 1 argument".to_string());
+            return Err(EvalError::message("when requires at least 1 argument"));
         }
 
         let condition = self.eval(&list[1])?;
@@ -149,9 +150,9 @@ impl Evaluator {
         }
     }
 
-    pub fn eval_unless(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    pub fn eval_unless(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() < 2 {
-            return Err("unless requires at least 1 argument".to_string());
+            return Err(EvalError::message("unless requires at least 1 argument"));
         }
 
         let condition = self.eval(&list[1])?;
@@ -175,9 +176,9 @@ impl Evaluator {
         }
     }
 
-    pub fn eval_case(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    pub fn eval_case(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() < 2 {
-            return Err("case requires at least 1 argument".to_string());
+            return Err(EvalError::message("case requires at least 1 argument"));
         }
 
         let key = self.eval(&list[1])?;
@@ -223,7 +224,7 @@ impl Evaluator {
                         return result;
                     }
                 }
-                _ => return Err("case clause must be a non-empty list".to_string()),
+                _ => return Err(EvalError::message("case clause must be a non-empty list")),
             }
         }
 
@@ -243,7 +244,307 @@ impl Evaluator {
         }
     }
 
-    pub fn eval_application(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    pub fn eval_do(&mut self, list: &[Expr]) -> EvalResult {
+        if list.len() < 3 {
+            return Err(EvalError::message("do requires bindings and a test clause"));
+        }
+
+        let bindings = match &list[1] {
+            Expr::List(items) => items,
+            _ => return Err(EvalError::message("do bindings must be a list")),
+        };
+
+        let test_clause = match &list[2] {
+            Expr::List(items) => items,
+            _ => return Err(EvalError::message("do test clause must be a list")),
+        };
+
+        if test_clause.is_empty() {
+            return Err(EvalError::message("do test clause cannot be empty"));
+        }
+
+        self.environment.push_scope();
+        let result = (|| -> EvalResult {
+            let mut binding_info: Vec<(String, Option<Expr>)> = Vec::new();
+
+            for binding in bindings {
+                let items = match binding {
+                    Expr::List(items) if !items.is_empty() => items,
+                    _ => {
+                        return Err(EvalError::message(
+                            "Each do binding must be a non-empty list",
+                        ))
+                    }
+                };
+
+                if items.len() > 3 {
+                    return Err(EvalError::message(
+                        "do binding may only specify name, init, and optional step",
+                    ));
+                }
+
+                let name = match &items[0] {
+                    Expr::Symbol(s) => s.clone(),
+                    _ => return Err(EvalError::message("do binding name must be a symbol")),
+                };
+
+                let init_value = if items.len() >= 2 {
+                    self.eval(&items[1])?
+                } else {
+                    Expr::List(vec![])
+                };
+                self.environment.set(name.clone(), init_value);
+
+                let step_expr = if items.len() == 3 {
+                    Some(items[2].clone())
+                } else {
+                    None
+                };
+                binding_info.push((name, step_expr));
+            }
+
+            let body_forms = &list[3..];
+
+            loop {
+                let test_result = self.eval(&test_clause[0])?;
+                if self.is_truthy(&test_result) {
+                    if test_clause.len() == 1 {
+                        return Ok(test_result);
+                    }
+
+                    let mut final_value = Expr::List(vec![]);
+                    for expr in &test_clause[1..] {
+                        final_value = self.eval(expr)?;
+                    }
+                    return Ok(final_value);
+                }
+
+                for expr in body_forms {
+                    self.eval(expr)?;
+                }
+
+                let mut next_values: Vec<Option<Expr>> = Vec::with_capacity(binding_info.len());
+                for (_, step_expr) in &binding_info {
+                    if let Some(step) = step_expr {
+                        next_values.push(Some(self.eval(step)?));
+                    } else {
+                        next_values.push(None);
+                    }
+                }
+
+                for ((name, _), maybe_value) in binding_info.iter().zip(next_values.into_iter()) {
+                    if let Some(value) = maybe_value {
+                        self.environment.set(name.clone(), value);
+                    }
+                }
+            }
+        })();
+        self.environment.pop_scope();
+        result
+    }
+
+    pub fn eval_loop(&mut self, list: &[Expr]) -> EvalResult {
+        if list.len() >= 3
+            && Self::is_do_binding_list(&list[1])
+            && matches!(&list[2], Expr::List(_))
+        {
+            return self.eval_do(list);
+        }
+
+        if list.len() == 1 {
+            return Ok(Expr::List(vec![]));
+        }
+
+        loop {
+            for expr in &list[1..] {
+                self.eval(expr)?;
+            }
+        }
+    }
+
+    pub fn eval_catch(&mut self, list: &[Expr]) -> EvalResult {
+        if list.len() < 2 {
+            return Err(EvalError::message("catch requires a tag and optional body"));
+        }
+
+        let tag = self.eval(&list[1])?;
+        let mut last_value = Expr::List(vec![]);
+
+        for expr in &list[2..] {
+            match self.eval(expr) {
+                Ok(value) => last_value = value,
+                Err(EvalError::Throw {
+                    tag: thrown_tag,
+                    value,
+                }) => {
+                    if self.expr_equal(&tag, &thrown_tag) {
+                        return Ok(value);
+                    } else {
+                        return Err(EvalError::Throw {
+                            tag: thrown_tag,
+                            value,
+                        });
+                    }
+                }
+                Err(err) => return Err(err),
+            }
+        }
+
+        Ok(last_value)
+    }
+
+    pub fn eval_throw(&mut self, list: &[Expr]) -> EvalResult {
+        if list.len() < 2 {
+            return Err(EvalError::message("throw requires at least a tag"));
+        }
+
+        let tag = self.eval(&list[1])?;
+        let value = if list.len() > 2 {
+            self.eval(&list[2])?
+        } else {
+            Expr::List(vec![])
+        };
+
+        Err(EvalError::Throw { tag, value })
+    }
+
+    pub fn eval_unwind_protect(&mut self, list: &[Expr]) -> EvalResult {
+        if list.len() < 2 {
+            return Err(EvalError::message(
+                "unwind-protect requires a protected form",
+            ));
+        }
+
+        let protected_result = self.eval(&list[1]);
+
+        let cleanup_result = list[2..].iter().try_for_each(|expr| match self.eval(expr) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(err),
+        });
+
+        match cleanup_result {
+            Err(err) => Err(err),
+            Ok(_) => match protected_result {
+                Ok(value) => Ok(value),
+                Err(err) => Err(err),
+            },
+        }
+    }
+
+    pub fn eval_block(&mut self, list: &[Expr]) -> EvalResult {
+        if list.len() < 2 {
+            return Err(EvalError::message("block requires a name"));
+        }
+
+        let name = match &list[1] {
+            Expr::Symbol(s) => s.clone(),
+            _ => return Err(EvalError::message("block name must be a symbol")),
+        };
+
+        let mut last_value = Expr::List(vec![]);
+        for expr in &list[2..] {
+            match self.eval(expr) {
+                Ok(value) => last_value = value,
+                Err(EvalError::ReturnFrom {
+                    name: target,
+                    value,
+                }) => {
+                    if target == name {
+                        return Ok(value);
+                    } else {
+                        return Err(EvalError::ReturnFrom {
+                            name: target,
+                            value,
+                        });
+                    }
+                }
+                Err(err) => return Err(err),
+            }
+        }
+
+        Ok(last_value)
+    }
+
+    pub fn eval_return_from(&mut self, list: &[Expr]) -> EvalResult {
+        if list.len() < 2 {
+            return Err(EvalError::message("return-from requires a block name"));
+        }
+
+        let name = match &list[1] {
+            Expr::Symbol(s) => s.clone(),
+            _ => {
+                return Err(EvalError::message(
+                    "return-from block name must be a symbol",
+                ))
+            }
+        };
+
+        let value = if list.len() > 2 {
+            self.eval(&list[2])?
+        } else {
+            Expr::List(vec![])
+        };
+
+        Err(EvalError::ReturnFrom { name, value })
+    }
+
+    pub fn eval_tagbody(&mut self, list: &[Expr]) -> EvalResult {
+        let forms = &list[1..];
+
+        let mut labels: HashMap<String, usize> = HashMap::new();
+        for (idx, form) in forms.iter().enumerate() {
+            if let Expr::Symbol(label) = form {
+                labels.insert(label.clone(), idx);
+            }
+        }
+
+        let mut index = 0usize;
+        while index < forms.len() {
+            match &forms[index] {
+                Expr::Symbol(_) => {
+                    index += 1;
+                }
+                expr => match self.eval(expr) {
+                    Ok(_) => index += 1,
+                    Err(EvalError::Go { label }) => {
+                        if let Some(target) = labels.get(&label) {
+                            index = target + 1;
+                        } else {
+                            return Err(EvalError::Go { label });
+                        }
+                    }
+                    Err(err) => return Err(err),
+                },
+            }
+        }
+
+        Ok(Expr::List(vec![]))
+    }
+
+    pub fn eval_go(&mut self, list: &[Expr]) -> EvalResult {
+        if list.len() != 2 {
+            return Err(EvalError::message("go requires exactly one label"));
+        }
+
+        let label = match &list[1] {
+            Expr::Symbol(s) => s.clone(),
+            _ => return Err(EvalError::message("go label must be a symbol")),
+        };
+
+        Err(EvalError::Go { label })
+    }
+
+    fn is_do_binding_list(expr: &Expr) -> bool {
+        match expr {
+            Expr::List(items) => items.iter().all(|item| match item {
+                Expr::List(inner) if !inner.is_empty() => true,
+                _ => false,
+            }),
+            _ => false,
+        }
+    }
+
+    pub fn eval_application(&mut self, list: &[Expr]) -> EvalResult {
         let func = self.eval(&list[0])?;
         let args: Result<Vec<_>, _> = list[1..].iter().map(|e| self.eval(e)).collect();
         let args = args?;
@@ -255,7 +556,7 @@ impl Evaluator {
             {
                 self.apply_lambda(&lambda, &args)
             }
-            _ => Err(format!("Cannot apply: {:?}", func)),
+            _ => Err(EvalError::message(format!("Cannot apply: {:?}", func))),
         }
     }
 }

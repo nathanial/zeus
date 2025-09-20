@@ -14,4 +14,4 @@ pub use evaluator::Evaluator;
 pub use parser::Parser;
 pub use repl::Repl;
 pub use tokenizer::Tokenizer;
-pub use types::{Expr, Token};
+pub use types::{EvalError, EvalResult, Expr, Token};

@@ -6,18 +6,18 @@ This document outlines the features that Zeus currently lacks compared to a full
 
 ### Special Forms & Control Flow
 - [x] `let` and `let*` - Local variable bindings ✅
-- [ ] `letrec` - Recursive local bindings
+- [x] `letrec` - Recursive local bindings ✅
 - [x] `cond` - Multi-branch conditional ✅
 - [x] `case` - Value-based branching ✅
 - [x] `and` / `or` - Logical operators with short-circuit evaluation ✅
 - [x] `when` / `unless` - Single-branch conditionals ✅
 - [x] `progn` - Sequential evaluation ✅
-- [ ] `begin` - Alias for progn
-- [ ] `do` / `loop` - Iteration constructs
-- [ ] `catch` / `throw` - Non-local control transfer
-- [ ] `unwind-protect` - Cleanup guarantees
-- [ ] `block` / `return-from` - Named blocks
-- [ ] `tagbody` / `go` - Low-level control flow
+- [x] `begin` - Alias for progn ✅
+- [x] `do` / `loop` - Iteration constructs ✅
+- [x] `catch` / `throw` - Non-local control transfer ✅
+- [x] `unwind-protect` - Cleanup guarantees ✅
+- [x] `block` / `return-from` - Named blocks ✅
+- [x] `tagbody` / `go` - Low-level control flow ✅
 
 ### Data Types
 - [ ] **Symbols**

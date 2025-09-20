@@ -1,8 +1,8 @@
 use crate::interpreter::evaluator::Evaluator;
-use crate::interpreter::types::Expr;
+use crate::interpreter::types::{EvalError, EvalResult, Expr};
 
 impl Evaluator {
-    pub fn apply_builtin(&mut self, name: &str, args: &[Expr]) -> Result<Expr, String> {
+    pub fn apply_builtin(&mut self, name: &str, args: &[Expr]) -> EvalResult {
         match name {
             // Arithmetic operations
             "+" => self.builtin_add(args),
@@ -41,25 +41,28 @@ impl Evaluator {
             "print" => self.builtin_print(args),
             "println" => self.builtin_println(args),
 
-            _ => Err(format!("Unknown function: {}", name)),
+            _ => Err(EvalError::message(format!("Unknown function: {}", name))),
         }
     }
 
-    fn builtin_add(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    fn builtin_add(&mut self, args: &[Expr]) -> EvalResult {
         let mut sum = 0.0;
         for arg in args {
             if let Expr::Number(n) = arg {
                 sum += n;
             } else {
-                return Err(format!("+ requires numeric arguments, got {:?}", arg));
+                return Err(EvalError::message(format!(
+                    "+ requires numeric arguments, got {:?}",
+                    arg
+                )));
             }
         }
         Ok(Expr::Number(sum))
     }
 
-    fn builtin_subtract(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    fn builtin_subtract(&mut self, args: &[Expr]) -> EvalResult {
         if args.is_empty() {
-            return Err("- requires at least 1 argument".to_string());
+            return Err(EvalError::message("- requires at least 1 argument"));
         }
 
         if let Expr::Number(first) = &args[0] {
@@ -72,30 +75,39 @@ impl Evaluator {
                 if let Expr::Number(n) = arg {
                     result -= n;
                 } else {
-                    return Err(format!("- requires numeric arguments, got {:?}", arg));
+                    return Err(EvalError::message(format!(
+                        "- requires numeric arguments, got {:?}",
+                        arg
+                    )));
                 }
             }
             Ok(Expr::Number(result))
         } else {
-            Err(format!("- requires numeric arguments, got {:?}", args[0]))
+            Err(EvalError::message(format!(
+                "- requires numeric arguments, got {:?}",
+                args[0]
+            )))
         }
     }
 
-    fn builtin_multiply(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    fn builtin_multiply(&mut self, args: &[Expr]) -> EvalResult {
         let mut product = 1.0;
         for arg in args {
             if let Expr::Number(n) = arg {
                 product *= n;
             } else {
-                return Err(format!("* requires numeric arguments, got {:?}", arg));
+                return Err(EvalError::message(format!(
+                    "* requires numeric arguments, got {:?}",
+                    arg
+                )));
             }
         }
         Ok(Expr::Number(product))
     }
 
-    fn builtin_divide(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    fn builtin_divide(&mut self, args: &[Expr]) -> EvalResult {
         if args.is_empty() {
-            return Err("/ requires at least 1 argument".to_string());
+            return Err(EvalError::message("/ requires at least 1 argument"));
         }
 
         if let Expr::Number(first) = &args[0] {
@@ -107,22 +119,28 @@ impl Evaluator {
             for arg in &args[1..] {
                 if let Expr::Number(n) = arg {
                     if *n == 0.0 {
-                        return Err("Division by zero".to_string());
+                        return Err(EvalError::message("Division by zero"));
                     }
                     result /= n;
                 } else {
-                    return Err(format!("/ requires numeric arguments, got {:?}", arg));
+                    return Err(EvalError::message(format!(
+                        "/ requires numeric arguments, got {:?}",
+                        arg
+                    )));
                 }
             }
             Ok(Expr::Number(result))
         } else {
-            Err(format!("/ requires numeric arguments, got {:?}", args[0]))
+            Err(EvalError::message(format!(
+                "/ requires numeric arguments, got {:?}",
+                args[0]
+            )))
         }
     }
 
-    fn builtin_equal(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    fn builtin_equal(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 2 {
-            return Err("= requires exactly 2 arguments".to_string());
+            return Err(EvalError::message("= requires exactly 2 arguments"));
         }
 
         let equal = match (&args[0], &args[1]) {
@@ -135,49 +153,49 @@ impl Evaluator {
         Ok(Expr::Number(if equal { 1.0 } else { 0.0 }))
     }
 
-    fn builtin_less(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    fn builtin_less(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 2 {
-            return Err("< requires exactly 2 arguments".to_string());
+            return Err(EvalError::message("< requires exactly 2 arguments"));
         }
 
         if let (Expr::Number(a), Expr::Number(b)) = (&args[0], &args[1]) {
             Ok(Expr::Number(if a < b { 1.0 } else { 0.0 }))
         } else {
-            Err("< requires numeric arguments".to_string())
+            Err(EvalError::message("< requires numeric arguments"))
         }
     }
 
-    fn builtin_greater(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    fn builtin_greater(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 2 {
-            return Err("> requires exactly 2 arguments".to_string());
+            return Err(EvalError::message("> requires exactly 2 arguments"));
         }
 
         if let (Expr::Number(a), Expr::Number(b)) = (&args[0], &args[1]) {
             Ok(Expr::Number(if a > b { 1.0 } else { 0.0 }))
         } else {
-            Err("> requires numeric arguments".to_string())
+            Err(EvalError::message("> requires numeric arguments"))
         }
     }
 
-    fn builtin_car(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    fn builtin_car(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 1 {
-            return Err("car requires exactly 1 argument".to_string());
+            return Err(EvalError::message("car requires exactly 1 argument"));
         }
 
         if let Expr::List(list) = &args[0] {
             if list.is_empty() {
-                Err("car: empty list".to_string())
+                Err(EvalError::message("car: empty list"))
             } else {
                 Ok(list[0].clone())
             }
         } else {
-            Err("car requires a list argument".to_string())
+            Err(EvalError::message("car requires a list argument"))
         }
     }
 
-    fn builtin_cdr(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    fn builtin_cdr(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 1 {
-            return Err("cdr requires exactly 1 argument".to_string());
+            return Err(EvalError::message("cdr requires exactly 1 argument"));
         }
 
         if let Expr::List(list) = &args[0] {
@@ -187,13 +205,13 @@ impl Evaluator {
                 Ok(Expr::List(list[1..].to_vec()))
             }
         } else {
-            Err("cdr requires a list argument".to_string())
+            Err(EvalError::message("cdr requires a list argument"))
         }
     }
 
-    fn builtin_cons(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    fn builtin_cons(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 2 {
-            return Err("cons requires exactly 2 arguments".to_string());
+            return Err(EvalError::message("cons requires exactly 2 arguments"));
         }
 
         if let Expr::List(list) = &args[1] {
@@ -205,20 +223,20 @@ impl Evaluator {
         }
     }
 
-    fn builtin_append(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    fn builtin_append(&mut self, args: &[Expr]) -> EvalResult {
         let mut result = Vec::new();
         for arg in args {
             match arg {
                 Expr::List(list) => result.extend_from_slice(list),
-                _ => return Err("append requires list arguments".to_string()),
+                _ => return Err(EvalError::message("append requires list arguments")),
             }
         }
         Ok(Expr::List(result))
     }
 
-    fn builtin_reverse(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    fn builtin_reverse(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 1 {
-            return Err("reverse requires exactly 1 argument".to_string());
+            return Err(EvalError::message("reverse requires exactly 1 argument"));
         }
 
         match &args[0] {
@@ -227,19 +245,21 @@ impl Evaluator {
                 reversed.reverse();
                 Ok(Expr::List(reversed))
             }
-            _ => Err("reverse requires a list argument".to_string()),
+            _ => Err(EvalError::message("reverse requires a list argument")),
         }
     }
 
-    fn builtin_length(&mut self, args: &[Expr]) -> Result<Expr, String> {
+    fn builtin_length(&mut self, args: &[Expr]) -> EvalResult {
         if args.len() != 1 {
-            return Err("length requires exactly 1 argument".to_string());
+            return Err(EvalError::message("length requires exactly 1 argument"));
         }
 
         match &args[0] {
             Expr::List(list) => Ok(Expr::Number(list.len() as f64)),
             Expr::String(s) => Ok(Expr::Number(s.len() as f64)),
-            _ => Err("length requires a list or string argument".to_string()),
+            _ => Err(EvalError::message(
+                "length requires a list or string argument",
+            )),
         }
     }
 

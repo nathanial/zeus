@@ -199,6 +199,122 @@ fn test_case_with_expressions() {
 }
 
 #[test]
+fn test_letrec_recursive_function() {
+    assert_eq!(
+        eval_to_number(
+            "(letrec ((fact (lambda (n)
+                                 (if (< n 2)
+                                     1
+                                     (* n (fact (- n 1)))))))
+               (fact 5))",
+        ),
+        120.0
+    );
+}
+
+#[test]
+fn test_begin_alias_for_progn() {
+    assert_eq!(eval_to_number("(begin 1 2 3)"), 3.0);
+}
+
+#[test]
+fn test_do_loop_accumulates() {
+    assert_eq!(
+        eval_to_number(
+            "(do ((i 0 (+ i 1))
+                  (acc 0 (+ acc i)))
+                 ((> i 5) acc))",
+        ),
+        15.0
+    );
+}
+
+#[test]
+fn test_loop_aliases_do() {
+    assert_eq!(
+        eval_to_number(
+            "(loop ((i 0 (+ i 1)))
+                   ((> i 3) i))",
+        ),
+        4.0
+    );
+}
+
+#[test]
+fn test_catch_throw_basic() {
+    assert_eq!(
+        eval_to_number("(catch (quote tag) (throw (quote tag) 42))"),
+        42.0
+    );
+}
+
+#[test]
+fn test_throw_without_catch_errors() {
+    let result = Evaluator::eval_once("(throw (quote missing) 1)");
+    assert!(result.unwrap_err().contains("Uncaught throw"));
+}
+
+#[test]
+fn test_unwind_protect_runs_cleanup_on_success() {
+    let mut evaluator = Evaluator::new();
+    evaluator.eval_str("(define flag 0)").unwrap();
+    evaluator
+        .eval_str("(unwind-protect 10 (define flag 42))")
+        .unwrap();
+    assert_eq!(evaluator.eval_str("flag").unwrap(), Expr::Number(42.0));
+}
+
+#[test]
+fn test_unwind_protect_runs_cleanup_on_throw() {
+    let mut evaluator = Evaluator::new();
+    evaluator.eval_str("(define cleaned 0)").unwrap();
+    let result = evaluator
+        .eval_str(
+            "(catch (quote done)
+                     (unwind-protect
+                         (throw (quote done) 99)
+                         (define cleaned 1)))",
+        )
+        .unwrap();
+    assert_eq!(result, Expr::Number(99.0));
+    assert_eq!(evaluator.eval_str("cleaned").unwrap(), Expr::Number(1.0));
+}
+
+#[test]
+fn test_block_return_from() {
+    assert_eq!(eval_to_number("(block exit (return-from exit 7) 100)"), 7.0);
+}
+
+#[test]
+fn test_return_from_defaults_to_nil() {
+    let result = Evaluator::eval_once("(block exit (return-from exit))").unwrap();
+    assert_eq!(result, Expr::List(vec![]));
+}
+
+#[test]
+fn test_catch_non_matching_throw_propagates() {
+    let err = Evaluator::eval_once("(catch (quote a) (throw (quote b) 1))").unwrap_err();
+    assert!(err.contains("Uncaught throw"));
+}
+
+#[test]
+fn test_tagbody_and_go() {
+    let mut evaluator = Evaluator::new();
+    let result = evaluator
+        .eval_str(
+            "(block done
+               (let ((n 0))
+                 (tagbody
+                   start
+                   (when (> n 2) (return-from done n))
+                   (define n (+ n 1))
+                   (go start))))",
+        )
+        .unwrap();
+    assert_eq!(result, Expr::Number(3.0));
+}
+
+#[test]
 fn test_progn_in_conditionals() {
     assert_eq!(
         eval_to_number("(when (> 3 2) (define y 20) (+ y 10))"),

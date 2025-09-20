@@ -1,5 +1,8 @@
 use crate::interpreter::{
-    environment::Environment, parser::Parser, tokenizer::Tokenizer, types::Expr,
+    environment::Environment,
+    parser::Parser,
+    tokenizer::Tokenizer,
+    types::{EvalError, EvalResult, Expr},
 };
 
 pub struct Evaluator {
@@ -27,7 +30,7 @@ impl Evaluator {
 
     pub fn eval_str(&mut self, input: &str) -> Result<Expr, String> {
         let expr = Self::parse(input)?;
-        self.eval(&expr)
+        self.eval(&expr).map_err(|e| e.to_string())
     }
 
     pub fn eval_once(input: &str) -> Result<Expr, String> {
@@ -35,10 +38,10 @@ impl Evaluator {
         evaluator.eval_str(input)
     }
 
-    pub fn eval(&mut self, expr: &Expr) -> Result<Expr, String> {
+    pub fn eval(&mut self, expr: &Expr) -> EvalResult {
         match expr {
             Expr::Number(_) | Expr::String(_) => Ok(expr.clone()),
-            Expr::Symbol(name) => self.environment.get(name),
+            Expr::Symbol(name) => self.environment.get(name).map_err(EvalError::message),
             Expr::List(list) => {
                 if list.is_empty() {
                     return Ok(Expr::List(vec![]));
@@ -61,6 +64,17 @@ impl Evaluator {
                         "when" => self.eval_when(list),
                         "unless" => self.eval_unless(list),
                         "case" => self.eval_case(list),
+                        "letrec" => self.eval_letrec(list),
+                        "begin" => self.eval_begin(list),
+                        "do" => self.eval_do(list),
+                        "loop" => self.eval_loop(list),
+                        "catch" => self.eval_catch(list),
+                        "throw" => self.eval_throw(list),
+                        "unwind-protect" => self.eval_unwind_protect(list),
+                        "block" => self.eval_block(list),
+                        "return-from" => self.eval_return_from(list),
+                        "tagbody" => self.eval_tagbody(list),
+                        "go" => self.eval_go(list),
                         _ => self.eval_application(list),
                     },
                     _ => self.eval_application(list),
@@ -69,9 +83,9 @@ impl Evaluator {
         }
     }
 
-    fn eval_define(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    fn eval_define(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() != 3 {
-            return Err("define requires exactly 2 arguments".to_string());
+            return Err(EvalError::message("define requires exactly 2 arguments"));
         }
 
         if let Expr::Symbol(name) = &list[1] {
@@ -79,18 +93,26 @@ impl Evaluator {
             self.environment.set(name.clone(), value.clone());
             Ok(value)
         } else {
-            Err("First argument to define must be a symbol".to_string())
+            Err(EvalError::message(
+                "First argument to define must be a symbol",
+            ))
         }
     }
 
-    fn eval_defun(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    fn eval_defun(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() < 4 {
-            return Err("defun requires at least 3 arguments: name, params, and body".to_string());
+            return Err(EvalError::message(
+                "defun requires at least 3 arguments: name, params, and body",
+            ));
         }
 
         let name = match &list[1] {
             Expr::Symbol(s) => s.clone(),
-            _ => return Err("First argument to defun must be a symbol".to_string()),
+            _ => {
+                return Err(EvalError::message(
+                    "First argument to defun must be a symbol",
+                ))
+            }
         };
 
         let params = match &list[2] {
@@ -98,12 +120,16 @@ impl Evaluator {
                 // Verify all params are symbols
                 for param in params {
                     if !matches!(param, Expr::Symbol(_)) {
-                        return Err("All parameters must be symbols".to_string());
+                        return Err(EvalError::message("All parameters must be symbols"));
                     }
                 }
                 list[2].clone()
             }
-            _ => return Err("Second argument to defun must be a parameter list".to_string()),
+            _ => {
+                return Err(EvalError::message(
+                    "Second argument to defun must be a parameter list",
+                ))
+            }
         };
 
         // Build the lambda expression: (lambda params body...)
@@ -131,9 +157,9 @@ impl Evaluator {
         Ok(Expr::Symbol(name))
     }
 
-    fn eval_if(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    fn eval_if(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() != 4 {
-            return Err("if requires exactly 3 arguments".to_string());
+            return Err(EvalError::message("if requires exactly 3 arguments"));
         }
 
         let condition = self.eval(&list[1])?;
@@ -150,29 +176,29 @@ impl Evaluator {
         }
     }
 
-    fn eval_quote(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    fn eval_quote(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() != 2 {
-            return Err("quote requires exactly 1 argument".to_string());
+            return Err(EvalError::message("quote requires exactly 1 argument"));
         }
         Ok(list[1].clone())
     }
 
-    fn eval_lambda(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    fn eval_lambda(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() != 3 {
-            return Err("lambda requires exactly 2 arguments".to_string());
+            return Err(EvalError::message("lambda requires exactly 2 arguments"));
         }
 
         Ok(Expr::List(list.to_vec()))
     }
 
-    fn eval_let(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    fn eval_let(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() < 3 {
-            return Err("let requires at least 2 arguments".to_string());
+            return Err(EvalError::message("let requires at least 2 arguments"));
         }
 
         let bindings = match &list[1] {
             Expr::List(bindings) => bindings,
-            _ => return Err("let bindings must be a list".to_string()),
+            _ => return Err(EvalError::message("let bindings must be a list")),
         };
 
         self.environment.push_scope();
@@ -187,12 +213,14 @@ impl Evaluator {
                         binding_values.push((pair[0].clone(), value));
                     } else {
                         self.environment.pop_scope();
-                        return Err("let binding must start with a symbol".to_string());
+                        return Err(EvalError::message("let binding must start with a symbol"));
                     }
                 }
                 _ => {
                     self.environment.pop_scope();
-                    return Err("let binding must be a list of two elements".to_string());
+                    return Err(EvalError::message(
+                        "let binding must be a list of two elements",
+                    ));
                 }
             }
         }
@@ -217,14 +245,14 @@ impl Evaluator {
         result
     }
 
-    fn eval_let_star(&mut self, list: &[Expr]) -> Result<Expr, String> {
+    fn eval_let_star(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() < 3 {
-            return Err("let* requires at least 2 arguments".to_string());
+            return Err(EvalError::message("let* requires at least 2 arguments"));
         }
 
         let bindings = match &list[1] {
             Expr::List(bindings) => bindings,
-            _ => return Err("let* bindings must be a list".to_string()),
+            _ => return Err(EvalError::message("let* bindings must be a list")),
         };
 
         self.environment.push_scope();
@@ -238,12 +266,14 @@ impl Evaluator {
                         self.environment.set(name.clone(), value);
                     } else {
                         self.environment.pop_scope();
-                        return Err("let* binding must start with a symbol".to_string());
+                        return Err(EvalError::message("let* binding must start with a symbol"));
                     }
                 }
                 _ => {
                     self.environment.pop_scope();
-                    return Err("let* binding must be a list of two elements".to_string());
+                    return Err(EvalError::message(
+                        "let* binding must be a list of two elements",
+                    ));
                 }
             }
         }
@@ -261,5 +291,89 @@ impl Evaluator {
         result
     }
 
+    fn eval_letrec(&mut self, list: &[Expr]) -> EvalResult {
+        if list.len() < 3 {
+            return Err(EvalError::message("letrec requires at least 2 arguments"));
+        }
+
+        let bindings = match &list[1] {
+            Expr::List(bindings) => bindings,
+            _ => return Err(EvalError::message("letrec bindings must be a list")),
+        };
+
+        self.environment.push_scope();
+        let result = (|| -> EvalResult {
+            // Pre-bind all variables to nil so they are visible during initialization
+            for binding in bindings {
+                match binding {
+                    Expr::List(pair) if !pair.is_empty() => {
+                        if let Expr::Symbol(name) = &pair[0] {
+                            self.environment.set(name.clone(), Expr::List(vec![]));
+                        } else {
+                            return Err(EvalError::message(
+                                "letrec binding must start with a symbol",
+                            ));
+                        }
+                    }
+                    _ => {
+                        return Err(EvalError::message(
+                            "letrec binding must be a non-empty list",
+                        ))
+                    }
+                }
+            }
+
+            // Evaluate initial values with access to all bindings
+            for binding in bindings {
+                match binding {
+                    Expr::List(pair) if pair.len() >= 2 => {
+                        if let Expr::Symbol(name) = &pair[0] {
+                            let value = self.eval(&pair[1])?;
+                            self.environment.set(name.clone(), value);
+                        } else {
+                            return Err(EvalError::message(
+                                "letrec binding must start with a symbol",
+                            ));
+                        }
+                    }
+                    _ => {
+                        return Err(EvalError::message(
+                            "letrec binding must have at least a symbol and value",
+                        ))
+                    }
+                }
+            }
+
+            // Evaluate body expressions
+            let mut last = Expr::List(vec![]);
+            for body_expr in &list[2..] {
+                last = self.eval(body_expr)?;
+            }
+            Ok(last)
+        })();
+        self.environment.pop_scope();
+        result
+    }
+
+    fn eval_begin(&mut self, list: &[Expr]) -> EvalResult {
+        if list.len() == 1 {
+            return Ok(Expr::List(vec![]));
+        }
+
+        let mut result = Expr::List(vec![]);
+        for expr in &list[1..] {
+            result = self.eval(expr)?;
+        }
+        Ok(result)
+    }
+
     // Continued in evaluator_special_forms.rs and evaluator_builtins.rs...
+    pub(crate) fn is_truthy(&self, expr: &Expr) -> bool {
+        match expr {
+            Expr::Number(n) => *n != 0.0,
+            Expr::List(list) => !list.is_empty(),
+            Expr::String(s) => !s.is_empty(),
+            _ => true,
+        }
+    }
 }
