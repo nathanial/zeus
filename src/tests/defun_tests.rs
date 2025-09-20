@@ -1,10 +1,11 @@
 use crate::interpreter::*;
+use crate::interpreter::types::SymbolData;
 
 #[test]
 fn test_defun_basic() {
     let mut evaluator = Evaluator::new();
     let result = evaluator.eval_str("(defun square (x) (* x x))").unwrap();
-    assert_eq!(result, Expr::Symbol("square".to_string()));
+    assert_eq!(result, Expr::Symbol(SymbolData::Interned("square".to_string())));
 
     let result = evaluator.eval_str("(square 5)").unwrap();
     assert_eq!(result, Expr::Number(25.0));

@@ -1,5 +1,6 @@
 use super::helpers::*;
 use crate::interpreter::*;
+use crate::interpreter::types::SymbolData;
 
 #[test]
 fn test_eval_number() {
@@ -37,7 +38,7 @@ fn test_eval_quote() {
     assert_eq!(
         result,
         Expr::List(vec![
-            Expr::Symbol("+".to_string()),
+            Expr::Symbol(SymbolData::Interned("+".to_string())),
             Expr::Number(1.0),
             Expr::Number(2.0),
         ])
@@ -45,7 +46,7 @@ fn test_eval_quote() {
 
     // Test single-quote syntax
     let result = Evaluator::eval_once("(quote x)").unwrap();
-    assert_eq!(result, Expr::Symbol("x".to_string()));
+    assert_eq!(result, Expr::Symbol(SymbolData::Interned("x".to_string())));
 }
 
 #[test]

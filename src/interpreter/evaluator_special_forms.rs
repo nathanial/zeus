@@ -15,7 +15,7 @@ impl Evaluator {
 
                     // Check for else clause
                     let is_else = match condition {
-                        Expr::Symbol(s) if s == "else" => true,
+                        Expr::Symbol(sym_data) if sym_data.name() == "else" => true,
                         _ => false,
                     };
 
@@ -190,7 +190,7 @@ impl Evaluator {
 
                     // Check for else/otherwise clause
                     let is_else = match test_value {
-                        Expr::Symbol(s) if s == "else" || s == "otherwise" => true,
+                        Expr::Symbol(sym_data) if sym_data.name() == "else" || sym_data.name() == "otherwise" => true,
                         _ => false,
                     };
 
@@ -284,7 +284,12 @@ impl Evaluator {
                 }
 
                 let name = match &items[0] {
-                    Expr::Symbol(s) => s.clone(),
+                    Expr::Symbol(sym_data) => {
+                        if sym_data.is_keyword() {
+                            return Err(EvalError::message("Cannot bind to a keyword"));
+                        }
+                        sym_data.name().to_string()
+                    },
                     _ => return Err(EvalError::message("do binding name must be a symbol")),
                 };
 
@@ -437,7 +442,7 @@ impl Evaluator {
         }
 
         let name = match &list[1] {
-            Expr::Symbol(s) => s.clone(),
+            Expr::Symbol(sym_data) => sym_data.name().to_string(),
             _ => return Err(EvalError::message("block name must be a symbol")),
         };
 
@@ -471,7 +476,7 @@ impl Evaluator {
         }
 
         let name = match &list[1] {
-            Expr::Symbol(s) => s.clone(),
+            Expr::Symbol(sym_data) => sym_data.name().to_string(),
             _ => {
                 return Err(EvalError::message(
                     "return-from block name must be a symbol",
@@ -493,8 +498,10 @@ impl Evaluator {
 
         let mut labels: HashMap<String, usize> = HashMap::new();
         for (idx, form) in forms.iter().enumerate() {
-            if let Expr::Symbol(label) = form {
-                labels.insert(label.clone(), idx);
+            if let Expr::Symbol(sym_data) = form {
+                if !sym_data.is_keyword() {
+                    labels.insert(sym_data.name().to_string(), idx);
+                }
             }
         }
 
@@ -527,7 +534,7 @@ impl Evaluator {
         }
 
         let label = match &list[1] {
-            Expr::Symbol(s) => s.clone(),
+            Expr::Symbol(sym_data) => sym_data.name().to_string(),
             _ => return Err(EvalError::message("go label must be a symbol")),
         };
 
@@ -550,9 +557,9 @@ impl Evaluator {
         let args = args?;
 
         match func {
-            Expr::Symbol(name) => self.apply_builtin(&name, &args),
+            Expr::Symbol(sym_data) => self.apply_builtin(sym_data.name(), &args),
             Expr::List(lambda)
-                if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) =>
+                if lambda.len() == 3 && matches!(&lambda[0], Expr::Symbol(sym_data) if sym_data.name() == "lambda") =>
             {
                 self.apply_lambda(&lambda, &args)
             }

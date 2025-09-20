@@ -19,4 +19,6 @@ pub mod parser_tests;
 #[cfg(test)]
 pub mod special_forms_tests;
 #[cfg(test)]
+pub mod symbol_tests;
+#[cfg(test)]
 pub mod tokenizer_tests;

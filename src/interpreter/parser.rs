@@ -1,4 +1,4 @@
-use crate::interpreter::types::{Expr, Token};
+use crate::interpreter::types::{Expr, SymbolData, Token};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -30,7 +30,8 @@ impl Parser {
     fn parse_expr(&mut self) -> Result<Expr, String> {
         match self.advance() {
             Some(Token::Number(n)) => Ok(Expr::Number(n)),
-            Some(Token::Symbol(s)) => Ok(Expr::Symbol(s)),
+            Some(Token::Symbol(s)) => Ok(Expr::Symbol(SymbolData::Interned(s))),
+            Some(Token::Keyword(s)) => Ok(Expr::Symbol(SymbolData::Keyword(s))),
             Some(Token::String(s)) => Ok(Expr::String(s)),
             Some(Token::LeftParen) => {
                 let mut list = Vec::new();

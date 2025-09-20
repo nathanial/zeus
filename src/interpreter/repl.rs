@@ -1,4 +1,4 @@
-use crate::interpreter::{evaluator::Evaluator, types::Expr};
+use crate::interpreter::{evaluator::Evaluator, types::{Expr, SymbolData}};
 use std::io::{self, Write};
 
 pub struct Repl {
@@ -62,7 +62,13 @@ impl Repl {
                     format!("{}", n)
                 }
             }
-            Expr::Symbol(s) => s.clone(),
+            Expr::Symbol(sym_data) => {
+                match sym_data {
+                    SymbolData::Keyword(name) => format!(":{}", name),
+                    SymbolData::Uninterned(name, id) => format!("#:{}#{}", name, id),
+                    SymbolData::Interned(name) => name.clone(),
+                }
+            }
             Expr::String(s) => format!("\"{}\"", s),
             Expr::List(list) => {
                 let items: Vec<String> = list.iter().map(|e| self.format_expr(e)).collect();

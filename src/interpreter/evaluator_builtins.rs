@@ -41,6 +41,12 @@ impl Evaluator {
             "print" => self.builtin_print(args),
             "println" => self.builtin_println(args),
 
+            // Symbol operations
+            "gensym" => self.builtin_gensym(args),
+            "get" => self.builtin_get(args),
+            "put" => self.builtin_put(args),
+            "symbol-plist" => self.builtin_symbol_plist(args),
+
             _ => Err(EvalError::message(format!("Unknown function: {}", name))),
         }
     }
@@ -261,6 +267,78 @@ impl Evaluator {
                 "length requires a list or string argument",
             )),
         }
+    }
+
+    fn builtin_gensym(&mut self, args: &[Expr]) -> EvalResult {
+        let prefix = if args.is_empty() {
+            ""
+        } else if args.len() == 1 {
+            match &args[0] {
+                Expr::String(s) => s,
+                Expr::Symbol(sym_data) => sym_data.name(),
+                _ => return Err(EvalError::message("gensym prefix must be a string or symbol")),
+            }
+        } else {
+            return Err(EvalError::message("gensym takes at most 1 argument"));
+        };
+
+        let sym_data = self.environment.generate_gensym(prefix);
+        Ok(Expr::Symbol(sym_data))
+    }
+
+    fn builtin_get(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 2 {
+            return Err(EvalError::message("get requires exactly 2 arguments"));
+        }
+
+        let symbol = match &args[0] {
+            Expr::Symbol(sym_data) => sym_data.name(),
+            _ => return Err(EvalError::message("get: first argument must be a symbol")),
+        };
+
+        let property = match &args[1] {
+            Expr::Symbol(sym_data) => sym_data.name(),
+            Expr::String(s) => s,
+            _ => return Err(EvalError::message("get: second argument must be a symbol or string")),
+        };
+
+        Ok(self.environment.get_property(symbol, property)
+            .unwrap_or_else(|| Expr::List(vec![])))
+    }
+
+    fn builtin_put(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 3 {
+            return Err(EvalError::message("put requires exactly 3 arguments"));
+        }
+
+        let symbol = match &args[0] {
+            Expr::Symbol(sym_data) => sym_data.name().to_string(),
+            _ => return Err(EvalError::message("put: first argument must be a symbol")),
+        };
+
+        let property = match &args[1] {
+            Expr::Symbol(sym_data) => sym_data.name().to_string(),
+            Expr::String(s) => s.clone(),
+            _ => return Err(EvalError::message("put: second argument must be a symbol or string")),
+        };
+
+        let value = args[2].clone();
+        self.environment.set_property(symbol, property, value.clone());
+        Ok(value)
+    }
+
+    fn builtin_symbol_plist(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() != 1 {
+            return Err(EvalError::message("symbol-plist requires exactly 1 argument"));
+        }
+
+        let symbol = match &args[0] {
+            Expr::Symbol(sym_data) => sym_data.name(),
+            _ => return Err(EvalError::message("symbol-plist: argument must be a symbol")),
+        };
+
+        let plist = self.environment.get_symbol_plist(symbol);
+        Ok(Expr::List(plist))
     }
 
     // Continued in next part...

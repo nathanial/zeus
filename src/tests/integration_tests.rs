@@ -1,4 +1,5 @@
 use crate::interpreter::*;
+use crate::interpreter::types::SymbolData;
 
 #[test]
 fn test_repl_integration() {
@@ -36,11 +37,11 @@ fn test_format_expr() {
     );
 
     // Test symbol formatting
-    assert_eq!(repl.format_expr(&Expr::Symbol("x".to_string())), "x");
+    assert_eq!(repl.format_expr(&Expr::Symbol(SymbolData::Interned("x".to_string()))), "x");
 
     // Test list formatting
     let list = Expr::List(vec![
-        Expr::Symbol("+".to_string()),
+        Expr::Symbol(SymbolData::Interned("+".to_string())),
         Expr::Number(1.0),
         Expr::Number(2.0),
     ]);

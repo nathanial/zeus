@@ -1,4 +1,5 @@
 use crate::interpreter::*;
+use crate::interpreter::types::SymbolData;
 
 #[test]
 fn test_parser_number() {
@@ -13,7 +14,7 @@ fn test_parser_symbol() {
     let tokens = vec![Token::Symbol("x".to_string())];
     let mut parser = Parser::new(tokens);
     let expr = parser.parse().unwrap();
-    assert_eq!(expr, Expr::Symbol("x".to_string()));
+    assert_eq!(expr, Expr::Symbol(SymbolData::Interned("x".to_string())));
 }
 
 #[test]
@@ -38,7 +39,7 @@ fn test_parser_list() {
     assert_eq!(
         expr,
         Expr::List(vec![
-            Expr::Symbol("+".to_string()),
+            Expr::Symbol(SymbolData::Interned("+".to_string())),
             Expr::Number(1.0),
             Expr::Number(2.0),
         ])
@@ -63,9 +64,9 @@ fn test_parser_nested_list() {
     assert_eq!(
         expr,
         Expr::List(vec![
-            Expr::Symbol("+".to_string()),
+            Expr::Symbol(SymbolData::Interned("+".to_string())),
             Expr::List(vec![
-                Expr::Symbol("*".to_string()),
+                Expr::Symbol(SymbolData::Interned("*".to_string())),
                 Expr::Number(2.0),
                 Expr::Number(3.0),
             ]),

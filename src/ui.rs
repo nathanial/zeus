@@ -390,7 +390,7 @@ pub fn run_ui() {
 }
 
 fn format_expr(expr: &crate::interpreter::types::Expr) -> String {
-    use crate::interpreter::types::Expr;
+    use crate::interpreter::types::{Expr, SymbolData};
 
     match expr {
         Expr::Number(n) => {
@@ -400,7 +400,13 @@ fn format_expr(expr: &crate::interpreter::types::Expr) -> String {
                 format!("{}", n)
             }
         }
-        Expr::Symbol(s) => s.clone(),
+        Expr::Symbol(sym_data) => {
+            match sym_data {
+                SymbolData::Keyword(name) => format!(":{}", name),
+                SymbolData::Uninterned(name, id) => format!("#:{}#{}", name, id),
+                SymbolData::Interned(name) => name.clone(),
+            }
+        }
         Expr::String(s) => format!("\"{}\"", s),
         Expr::List(list) => {
             if list.is_empty() {

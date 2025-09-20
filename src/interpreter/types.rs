@@ -3,14 +3,40 @@ pub enum Token {
     LeftParen,
     RightParen,
     Symbol(String),
+    Keyword(String),  // Self-evaluating keyword symbols (e.g., :keyword)
     Number(f64),
     String(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum SymbolData {
+    Interned(String),      // Normal symbols that are interned
+    Uninterned(String, u64), // Uninterned symbols from gensym with unique ID
+    Keyword(String),       // Self-evaluating keyword symbols
+}
+
+impl SymbolData {
+    pub fn name(&self) -> &str {
+        match self {
+            SymbolData::Interned(name) => name,
+            SymbolData::Uninterned(name, _) => name,
+            SymbolData::Keyword(name) => name,
+        }
+    }
+
+    pub fn is_keyword(&self) -> bool {
+        matches!(self, SymbolData::Keyword(_))
+    }
+
+    pub fn is_uninterned(&self) -> bool {
+        matches!(self, SymbolData::Uninterned(_, _))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Number(f64),
-    Symbol(String),
+    Symbol(SymbolData),
     String(String),
     List(Vec<Expr>),
 }

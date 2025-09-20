@@ -102,9 +102,9 @@ impl Evaluator {
             let func_args: Vec<Expr> = lists.iter().map(|l| l[i].clone()).collect();
 
             let val = match func {
-                Expr::Symbol(name) => self.apply_builtin(name, &func_args)?,
+                Expr::Symbol(sym_data) => self.apply_builtin(sym_data.name(), &func_args)?,
                 Expr::List(lambda)
-                    if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) =>
+                    if lambda.len() == 3 && matches!(&lambda[0], Expr::Symbol(sym_data) if sym_data.name() == "lambda") =>
                 {
                     self.apply_lambda(lambda, &func_args)?
                 }
@@ -138,9 +138,9 @@ impl Evaluator {
         let mut result = Vec::new();
         for item in list {
             let test_result = match pred {
-                Expr::Symbol(name) => self.apply_builtin(name, &[item.clone()])?,
+                Expr::Symbol(sym_data) => self.apply_builtin(sym_data.name(), &[item.clone()])?,
                 Expr::List(lambda)
-                    if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) =>
+                    if lambda.len() == 3 && matches!(&lambda[0], Expr::Symbol(sym_data) if sym_data.name() == "lambda") =>
                 {
                     self.apply_lambda(lambda, &[item.clone()])?
                 }
@@ -179,9 +179,9 @@ impl Evaluator {
         let mut result = Vec::new();
         for item in list {
             let test_result = match pred {
-                Expr::Symbol(name) => self.apply_builtin(name, &[item.clone()])?,
+                Expr::Symbol(sym_data) => self.apply_builtin(sym_data.name(), &[item.clone()])?,
                 Expr::List(lambda)
-                    if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) =>
+                    if lambda.len() == 3 && matches!(&lambda[0], Expr::Symbol(sym_data) if sym_data.name() == "lambda") =>
                 {
                     self.apply_lambda(lambda, &[item.clone()])?
                 }
@@ -236,9 +236,9 @@ impl Evaluator {
 
         for item in &list[start_idx..] {
             acc = match func {
-                Expr::Symbol(name) => self.apply_builtin(name, &[acc, item.clone()])?,
+                Expr::Symbol(sym_data) => self.apply_builtin(sym_data.name(), &[acc, item.clone()])?,
                 Expr::List(lambda)
-                    if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) =>
+                    if lambda.len() == 3 && matches!(&lambda[0], Expr::Symbol(sym_data) if sym_data.name() == "lambda") =>
                 {
                     self.apply_lambda(lambda, &[acc, item.clone()])?
                 }
@@ -269,9 +269,9 @@ impl Evaluator {
         };
 
         match func {
-            Expr::Symbol(name) => self.apply_builtin(name, &list_args),
+            Expr::Symbol(sym_data) => self.apply_builtin(sym_data.name(), &list_args),
             Expr::List(lambda)
-                if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) =>
+                if lambda.len() == 3 && matches!(&lambda[0], Expr::Symbol(sym_data) if sym_data.name() == "lambda") =>
             {
                 self.apply_lambda(lambda, &list_args)
             }
@@ -290,9 +290,9 @@ impl Evaluator {
         let func_args = &args[1..];
 
         match func {
-            Expr::Symbol(name) => self.apply_builtin(name, func_args),
+            Expr::Symbol(sym_data) => self.apply_builtin(sym_data.name(), func_args),
             Expr::List(lambda)
-                if lambda.len() == 3 && lambda[0] == Expr::Symbol("lambda".to_string()) =>
+                if lambda.len() == 3 && matches!(&lambda[0], Expr::Symbol(sym_data) if sym_data.name() == "lambda") =>
             {
                 self.apply_lambda(lambda, func_args)
             }
@@ -327,7 +327,7 @@ impl Evaluator {
                     format!("{}", n)
                 }
             }
-            Expr::Symbol(s) => s.clone(),
+            Expr::Symbol(sym_data) => sym_data.name().to_string(),
             Expr::String(s) => s.clone(), // Print strings without quotes
             Expr::List(list) => {
                 let items: Vec<String> =
@@ -350,8 +350,12 @@ impl Evaluator {
             self.environment.push_scope();
 
             for (param, arg) in params.iter().zip(args.iter()) {
-                if let Expr::Symbol(name) = param {
-                    self.environment.set(name.clone(), arg.clone());
+                if let Expr::Symbol(sym_data) = param {
+                    if sym_data.is_keyword() {
+                        self.environment.pop_scope();
+                        return Err(EvalError::message("Cannot use keyword as parameter"));
+                    }
+                    self.environment.set(sym_data.name().to_string(), arg.clone());
                 } else {
                     self.environment.pop_scope();
                     return Err(EvalError::message("Lambda parameters must be symbols"));

@@ -154,6 +154,15 @@ impl Tokenizer {
                     Ok(Some(Token::Number(num)))
                 }
             }
+            Some(':') => {
+                self.advance(); // consume the ':'
+                let name = self.read_symbol();
+                if name.is_empty() {
+                    Err("Invalid keyword: empty name after ':'".to_string())
+                } else {
+                    Ok(Some(Token::Keyword(name)))
+                }
+            }
             Some(_) => {
                 let sym = self.read_symbol();
                 if sym.is_empty() {

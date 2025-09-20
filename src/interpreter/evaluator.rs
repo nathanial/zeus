@@ -2,7 +2,7 @@ use crate::interpreter::{
     environment::Environment,
     parser::Parser,
     tokenizer::Tokenizer,
-    types::{EvalError, EvalResult, Expr},
+    types::{EvalError, EvalResult, Expr, SymbolData},
 };
 
 pub struct Evaluator {
@@ -41,7 +41,18 @@ impl Evaluator {
     pub fn eval(&mut self, expr: &Expr) -> EvalResult {
         match expr {
             Expr::Number(_) | Expr::String(_) => Ok(expr.clone()),
-            Expr::Symbol(name) => self.environment.get(name).map_err(EvalError::message),
+            Expr::Symbol(sym_data) => {
+                match sym_data {
+                    SymbolData::Keyword(_) => {
+                        // Keywords are self-evaluating
+                        Ok(expr.clone())
+                    }
+                    SymbolData::Interned(name) | SymbolData::Uninterned(name, _) => {
+                        // Regular symbols and uninterned symbols evaluate to their values
+                        self.environment.get(name).map_err(EvalError::message)
+                    }
+                }
+            }
             Expr::List(list) => {
                 if list.is_empty() {
                     return Ok(Expr::List(vec![]));
@@ -49,7 +60,7 @@ impl Evaluator {
 
                 let first = &list[0];
                 match first {
-                    Expr::Symbol(name) => match name.as_str() {
+                    Expr::Symbol(sym_data) => match sym_data.name() {
                         "define" => self.eval_define(list),
                         "defun" => self.eval_defun(list),
                         "if" => self.eval_if(list),
@@ -88,9 +99,12 @@ impl Evaluator {
             return Err(EvalError::message("define requires exactly 2 arguments"));
         }
 
-        if let Expr::Symbol(name) = &list[1] {
+        if let Expr::Symbol(sym_data) = &list[1] {
+            if sym_data.is_keyword() {
+                return Err(EvalError::message("Cannot define a keyword"));
+            }
             let value = self.eval(&list[2])?;
-            self.environment.set(name.clone(), value.clone());
+            self.environment.set(sym_data.name().to_string(), value.clone());
             Ok(value)
         } else {
             Err(EvalError::message(
@@ -107,7 +121,12 @@ impl Evaluator {
         }
 
         let name = match &list[1] {
-            Expr::Symbol(s) => s.clone(),
+            Expr::Symbol(sym_data) => {
+                if sym_data.is_keyword() {
+                    return Err(EvalError::message("Cannot defun a keyword"));
+                }
+                sym_data.name().to_string()
+            }
             _ => {
                 return Err(EvalError::message(
                     "First argument to defun must be a symbol",
@@ -133,7 +152,7 @@ impl Evaluator {
         };
 
         // Build the lambda expression: (lambda params body...)
-        let mut lambda_expr = vec![Expr::Symbol("lambda".to_string()), params];
+        let mut lambda_expr = vec![Expr::Symbol(SymbolData::Interned("lambda".to_string())), params];
 
         // If there are multiple body expressions, wrap them in progn
         if list.len() == 4 {
@@ -141,7 +160,7 @@ impl Evaluator {
             lambda_expr.push(list[3].clone());
         } else {
             // Multiple body expressions - wrap in progn
-            let mut progn_expr = vec![Expr::Symbol("progn".to_string())];
+            let mut progn_expr = vec![Expr::Symbol(SymbolData::Interned("progn".to_string()))];
             for body_expr in &list[3..] {
                 progn_expr.push(body_expr.clone());
             }
@@ -154,7 +173,7 @@ impl Evaluator {
         self.environment.set(name.clone(), lambda.clone());
 
         // Return the function name as a symbol
-        Ok(Expr::Symbol(name))
+        Ok(Expr::Symbol(SymbolData::Interned(name)))
     }
 
     fn eval_if(&mut self, list: &[Expr]) -> EvalResult {
@@ -186,6 +205,22 @@ impl Evaluator {
     fn eval_lambda(&mut self, list: &[Expr]) -> EvalResult {
         if list.len() != 3 {
             return Err(EvalError::message("lambda requires exactly 2 arguments"));
+        }
+
+        // Validate parameters - they must be symbols and not keywords
+        if let Expr::List(params) = &list[1] {
+            for param in params {
+                match param {
+                    Expr::Symbol(sym_data) => {
+                        if sym_data.is_keyword() {
+                            return Err(EvalError::message("Lambda parameter cannot be a keyword"));
+                        }
+                    }
+                    _ => return Err(EvalError::message("Lambda parameters must be symbols")),
+                }
+            }
+        } else {
+            return Err(EvalError::message("Lambda parameters must be a list"));
         }
 
         Ok(Expr::List(list.to_vec()))
@@ -227,8 +262,10 @@ impl Evaluator {
 
         // Now set all the bindings
         for (symbol, value) in binding_values {
-            if let Expr::Symbol(name) = symbol {
-                self.environment.set(name, value);
+            if let Expr::Symbol(sym_data) = symbol {
+                if !sym_data.is_keyword() {
+                    self.environment.set(sym_data.name().to_string(), value);
+                }
             }
         }
 
@@ -261,9 +298,13 @@ impl Evaluator {
         for binding in bindings {
             match binding {
                 Expr::List(pair) if pair.len() == 2 => {
-                    if let Expr::Symbol(name) = &pair[0] {
+                    if let Expr::Symbol(sym_data) = &pair[0] {
+                        if sym_data.is_keyword() {
+                            self.environment.pop_scope();
+                            return Err(EvalError::message("Cannot bind to a keyword"));
+                        }
                         let value = self.eval(&pair[1])?;
-                        self.environment.set(name.clone(), value);
+                        self.environment.set(sym_data.name().to_string(), value);
                     } else {
                         self.environment.pop_scope();
                         return Err(EvalError::message("let* binding must start with a symbol"));
@@ -307,8 +348,11 @@ impl Evaluator {
             for binding in bindings {
                 match binding {
                     Expr::List(pair) if !pair.is_empty() => {
-                        if let Expr::Symbol(name) = &pair[0] {
-                            self.environment.set(name.clone(), Expr::List(vec![]));
+                        if let Expr::Symbol(sym_data) = &pair[0] {
+                            if sym_data.is_keyword() {
+                                return Err(EvalError::message("Cannot bind to a keyword"));
+                            }
+                            self.environment.set(sym_data.name().to_string(), Expr::List(vec![]));
                         } else {
                             return Err(EvalError::message(
                                 "letrec binding must start with a symbol",
@@ -327,9 +371,12 @@ impl Evaluator {
             for binding in bindings {
                 match binding {
                     Expr::List(pair) if pair.len() >= 2 => {
-                        if let Expr::Symbol(name) = &pair[0] {
+                        if let Expr::Symbol(sym_data) = &pair[0] {
+                            if sym_data.is_keyword() {
+                                return Err(EvalError::message("Cannot bind to a keyword"));
+                            }
                             let value = self.eval(&pair[1])?;
-                            self.environment.set(name.clone(), value);
+                            self.environment.set(sym_data.name().to_string(), value);
                         } else {
                             return Err(EvalError::message(
                                 "letrec binding must start with a symbol",
