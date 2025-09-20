@@ -1,5 +1,5 @@
 use crate::interpreter::evaluator::Evaluator;
-use raylib::consts::ConfigFlags;
+use raylib::consts::{ConfigFlags, TextureFilter};
 use raylib::core::text::RaylibFont;
 use raylib::prelude::*;
 use std::collections::VecDeque;
@@ -7,12 +7,23 @@ use std::path::Path;
 
 const WINDOW_WIDTH: i32 = 900;
 const WINDOW_HEIGHT: i32 = 650;
-const FONT_SIZE: i32 = 18;
-const LINE_HEIGHT: i32 = 22;
-const PADDING: i32 = 15;
-const FONT_SPACING: f32 = 1.0;
-const TITLE_FONT_SIZE: f32 = 20.0;
-const HELP_FONT_SIZE: f32 = 14.0;
+const BASE_FONT_SIZE: f32 = 18.0;
+const BASE_LINE_HEIGHT: f32 = 22.0;
+const BASE_PADDING: f32 = 15.0;
+const BASE_FONT_SPACING: f32 = 1.0;
+const BASE_TITLE_FONT_SIZE: f32 = 20.0;
+const BASE_HELP_FONT_SIZE: f32 = 14.0;
+const BASE_TITLE_BAR_HEIGHT: f32 = 35.0;
+const BASE_TITLE_TEXT_OFFSET_Y: f32 = 8.0;
+const BASE_HISTORY_START_Y: f32 = 45.0;
+const BASE_HISTORY_CLIP_TOP: f32 = 35.0;
+const BASE_HISTORY_MARGIN_BOTTOM: f32 = 100.0;
+const BASE_INPUT_AREA_OFFSET: f32 = 65.0;
+const BASE_INPUT_BOX_HEIGHT: f32 = 75.0;
+const BASE_INPUT_BOX_PADDING: f32 = 10.0;
+const BASE_PROMPT_OFFSET: f32 = 22.0;
+const BASE_HELP_OFFSET: f32 = 20.0;
+const BASE_CURSOR_WIDTH: f32 = 2.0;
 const MAX_HISTORY: usize = 100;
 const INPUT_COLOR: Color = Color::WHITE;
 const OUTPUT_COLOR: Color = Color::new(100, 255, 100, 255);
@@ -42,6 +53,8 @@ fn load_monospace_font(
     for path in FONT_PATH_CANDIDATES.iter() {
         if Path::new(path).exists() {
             if let Ok(font) = rl.load_font_ex(thread, path, base_size, None) {
+                font.texture()
+                    .set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_POINT);
                 return Some(font);
             }
         }
@@ -61,6 +74,27 @@ pub fn run_ui() {
         .title("Zeus LISP - Graphical REPL")
         .resizable()
         .build();
+
+    let dpi_scale = rl.get_window_scale_dpi();
+    let scale_factor = dpi_scale.x.max(dpi_scale.y).max(1.0);
+    let font_size = (BASE_FONT_SIZE * scale_factor).round() as i32;
+    let line_height = (BASE_LINE_HEIGHT * scale_factor).round() as i32;
+    let padding = (BASE_PADDING * scale_factor).round() as i32;
+    let font_spacing = BASE_FONT_SPACING * scale_factor;
+    let title_font_size = BASE_TITLE_FONT_SIZE * scale_factor;
+    let help_font_size = BASE_HELP_FONT_SIZE * scale_factor;
+    let title_bar_height = (BASE_TITLE_BAR_HEIGHT * scale_factor).round() as i32;
+    let title_text_offset = (BASE_TITLE_TEXT_OFFSET_Y * scale_factor).round() as i32;
+    let history_start_y = (BASE_HISTORY_START_Y * scale_factor).round() as i32;
+    let history_clip_top = (BASE_HISTORY_CLIP_TOP * scale_factor).round() as i32;
+    let history_margin_bottom = (BASE_HISTORY_MARGIN_BOTTOM * scale_factor).round() as i32;
+    let input_area_offset = (BASE_INPUT_AREA_OFFSET * scale_factor).round() as i32;
+    let input_box_height = (BASE_INPUT_BOX_HEIGHT * scale_factor).round() as i32;
+    let input_box_padding = (BASE_INPUT_BOX_PADDING * scale_factor).round() as i32;
+    let prompt_offset = (BASE_PROMPT_OFFSET * scale_factor).round() as i32;
+    let help_offset = (BASE_HELP_OFFSET * scale_factor).round() as i32;
+    let cursor_width = ((BASE_CURSOR_WIDTH * scale_factor).round() as i32).max(2);
+    let scroll_step = (line_height as f32 / 2.0).max(1.0);
 
     let mut evaluator = Evaluator::new();
     let mut current_input = String::new();
@@ -91,8 +125,11 @@ pub fn run_ui() {
         is_error: false,
     });
 
-    let custom_font = load_monospace_font(&mut rl, &thread, FONT_SIZE);
+    let custom_font = load_monospace_font(&mut rl, &thread, font_size);
     let fallback_font = rl.get_font_default();
+    fallback_font
+        .texture()
+        .set_texture_filter(&thread, TextureFilter::TEXTURE_FILTER_POINT);
 
     rl.set_target_fps(60);
 
@@ -157,13 +194,16 @@ pub fn run_ui() {
         // Handle scrolling
         let wheel_move = rl.get_mouse_wheel_move();
         if wheel_move != 0.0 {
-            scroll_offset -= (wheel_move * 3.0) as i32;
+            scroll_offset -= (wheel_move * scroll_step).round() as i32;
             scroll_offset = scroll_offset.max(0);
 
             // Calculate max scroll
             let total_lines = history.len() as i32;
-            let visible_lines = (WINDOW_HEIGHT - 145) / LINE_HEIGHT;
-            let max_scroll = ((total_lines - visible_lines) * LINE_HEIGHT).max(0);
+            let screen_height = rl.get_screen_height();
+            let history_height = screen_height - history_margin_bottom;
+            let scissor_height = (history_height - history_clip_top).max(line_height);
+            let visible_lines = (scissor_height / line_height).max(1);
+            let max_scroll = ((total_lines - visible_lines) * line_height).max(0);
             scroll_offset = scroll_offset.min(max_scroll);
         }
 
@@ -180,23 +220,29 @@ pub fn run_ui() {
         d.clear_background(BACKGROUND_COLOR);
 
         // Draw title bar
-        d.draw_rectangle(0, 0, d.get_screen_width(), 35, Color::new(35, 35, 55, 255));
+        d.draw_rectangle(
+            0,
+            0,
+            d.get_screen_width(),
+            title_bar_height,
+            Color::new(35, 35, 55, 255),
+        );
         if let Some(font) = font_ref {
             d.draw_text_ex(
                 font,
                 "Zeus LISP - Graphical REPL",
-                Vector2::new(15.0, 8.0),
-                TITLE_FONT_SIZE,
-                FONT_SPACING,
+                Vector2::new(padding as f32, title_text_offset as f32),
+                title_font_size,
+                font_spacing,
                 Color::WHITE,
             );
         } else {
             d.draw_text_ex(
                 &fallback_font,
                 "Zeus LISP - Graphical REPL",
-                Vector2::new(15.0, 8.0),
-                TITLE_FONT_SIZE,
-                FONT_SPACING,
+                Vector2::new(padding as f32, title_text_offset as f32),
+                title_font_size,
+                font_spacing,
                 Color::WHITE,
             );
         }
@@ -204,15 +250,17 @@ pub fn run_ui() {
         // Draw history area
         let screen_width = d.get_screen_width();
         let screen_height = d.get_screen_height();
-        let history_height = screen_height - 100;
-        let mut y = 45 - scroll_offset;
+        let history_height = (screen_height - history_margin_bottom).max(line_height);
+        let mut y = history_start_y - scroll_offset;
 
         // Set scissor mode to clip text that goes outside the history area
         {
-            let mut scissor = d.begin_scissor_mode(0, 35, screen_width, history_height - 35);
+            let scissor_height = (history_height - history_clip_top).max(line_height);
+            let mut scissor =
+                d.begin_scissor_mode(0, history_clip_top, screen_width, scissor_height);
 
             for line in history.iter() {
-                if y + LINE_HEIGHT >= 35 && y < history_height {
+                if y + line_height >= history_clip_top && y < history_height {
                     let color = if line.is_error {
                         ERROR_COLOR
                     } else if line.is_input {
@@ -225,58 +273,65 @@ pub fn run_ui() {
                         scissor.draw_text_ex(
                             font,
                             &line.text,
-                            Vector2::new(PADDING as f32, y as f32),
-                            FONT_SIZE as f32,
-                            FONT_SPACING,
+                            Vector2::new(padding as f32, y as f32),
+                            font_size as f32,
+                            font_spacing,
                             color,
                         );
                     } else {
                         scissor.draw_text_ex(
                             &fallback_font,
                             &line.text,
-                            Vector2::new(PADDING as f32, y as f32),
-                            FONT_SIZE as f32,
-                            FONT_SPACING,
+                            Vector2::new(padding as f32, y as f32),
+                            font_size as f32,
+                            font_spacing,
                             color,
                         );
                     }
                 }
-                y += LINE_HEIGHT;
+                y += line_height;
             }
         }
 
         // Draw input box
-        let input_y = screen_height - 65;
-        d.draw_rectangle(0, input_y - 10, screen_width, 75, INPUT_BOX_COLOR);
+        let input_y = screen_height - input_area_offset;
+        let input_box_top = (input_y - input_box_padding).max(0);
+        d.draw_rectangle(
+            0,
+            input_box_top,
+            screen_width,
+            input_box_height,
+            INPUT_BOX_COLOR,
+        );
         if let Some(font) = font_ref {
             d.draw_text_ex(
                 font,
                 "Input:",
-                Vector2::new(PADDING as f32, input_y as f32),
-                FONT_SIZE as f32,
-                FONT_SPACING,
+                Vector2::new(padding as f32, input_y as f32),
+                font_size as f32,
+                font_spacing,
                 Color::GRAY,
             );
         } else {
             d.draw_text_ex(
                 &fallback_font,
                 "Input:",
-                Vector2::new(PADDING as f32, input_y as f32),
-                FONT_SIZE as f32,
-                FONT_SPACING,
+                Vector2::new(padding as f32, input_y as f32),
+                font_size as f32,
+                font_spacing,
                 Color::GRAY,
             );
         }
 
         let prompt = format!("> {}", current_input);
-        let prompt_position = Vector2::new(PADDING as f32, (input_y + 22) as f32);
+        let prompt_position = Vector2::new(padding as f32, (input_y + prompt_offset) as f32);
         if let Some(font) = font_ref {
             d.draw_text_ex(
                 font,
                 &prompt,
                 prompt_position,
-                FONT_SIZE as f32,
-                FONT_SPACING,
+                font_size as f32,
+                font_spacing,
                 INPUT_COLOR,
             );
         } else {
@@ -284,8 +339,8 @@ pub fn run_ui() {
                 &fallback_font,
                 &prompt,
                 prompt_position,
-                FONT_SIZE as f32,
-                FONT_SPACING,
+                font_size as f32,
+                font_spacing,
                 INPUT_COLOR,
             );
         }
@@ -293,12 +348,18 @@ pub fn run_ui() {
         // Draw cursor
         if cursor_visible {
             let prompt_metrics = if let Some(font) = font_ref {
-                font.measure_text(&prompt, FONT_SIZE as f32, FONT_SPACING)
+                font.measure_text(&prompt, font_size as f32, font_spacing)
             } else {
-                fallback_font.measure_text(&prompt, FONT_SIZE as f32, FONT_SPACING)
+                fallback_font.measure_text(&prompt, font_size as f32, font_spacing)
             };
-            let cursor_x = (PADDING as f32 + prompt_metrics.x).round() as i32;
-            d.draw_rectangle(cursor_x, input_y + 22, 2, FONT_SIZE, INPUT_COLOR);
+            let cursor_x = (padding as f32 + prompt_metrics.x).round() as i32;
+            d.draw_rectangle(
+                cursor_x,
+                input_y + prompt_offset,
+                cursor_width,
+                font_size,
+                INPUT_COLOR,
+            );
         }
 
         // Draw help text at bottom
@@ -306,18 +367,18 @@ pub fn run_ui() {
             d.draw_text_ex(
                 font,
                 "ESC: Exit | Enter: Evaluate | Mouse Wheel: Scroll",
-                Vector2::new(PADDING as f32, (screen_height - 20) as f32),
-                HELP_FONT_SIZE,
-                FONT_SPACING,
+                Vector2::new(padding as f32, (screen_height - help_offset) as f32),
+                help_font_size,
+                font_spacing,
                 Color::GRAY,
             );
         } else {
             d.draw_text_ex(
                 &fallback_font,
                 "ESC: Exit | Enter: Evaluate | Mouse Wheel: Scroll",
-                Vector2::new(PADDING as f32, (screen_height - 20) as f32),
-                HELP_FONT_SIZE,
-                FONT_SPACING,
+                Vector2::new(padding as f32, (screen_height - help_offset) as f32),
+                help_font_size,
+                font_spacing,
                 Color::GRAY,
             );
         }
