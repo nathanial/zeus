@@ -15,8 +15,11 @@ impl Evaluator {
 
             // Comparison operations
             "=" => self.builtin_equal(args),
+            "/=" => self.builtin_not_equal(args),
             "<" => self.builtin_less(args),
+            "<=" => self.builtin_less_equal(args),
             ">" => self.builtin_greater(args),
+            ">=" => self.builtin_greater_equal(args),
 
             // List operations
             "list" => Ok(Expr::List(args.to_vec())),
@@ -193,16 +196,29 @@ impl Evaluator {
     }
 
     fn builtin_equal(&mut self, args: &[Expr]) -> EvalResult {
+        if args.len() < 2 {
+            return Err(EvalError::message("= requires at least 2 arguments"));
+        }
+
+        let all_numeric = args.iter().all(|arg| {
+            matches!(
+                arg,
+                Expr::Integer(_) | Expr::Float(_) | Expr::Rational { .. }
+            )
+        });
+
+        if all_numeric {
+            let numbers = Self::collect_numeric_args(args, "=", 2)?;
+            let first = numbers[0];
+            let result = numbers.iter().skip(1).all(|&n| n == first);
+            return Ok(Evaluator::bool_to_expr(result));
+        }
+
         if args.len() != 2 {
-            return Err(EvalError::message("= requires exactly 2 arguments"));
+            return Err(EvalError::message("= requires numeric arguments"));
         }
 
         let equal = match (&args[0], &args[1]) {
-            (a, b) if Self::to_number(a).is_ok() && Self::to_number(b).is_ok() => {
-                let a_val = Self::to_number(a).unwrap();
-                let b_val = Self::to_number(b).unwrap();
-                (a_val - b_val).abs() < f64::EPSILON
-            }
             (Expr::String(a), Expr::String(b)) => a == b,
             (Expr::Character(a), Expr::Character(b)) => a == b,
             (Expr::Symbol(a), Expr::Symbol(b)) => a == b,
@@ -212,30 +228,86 @@ impl Evaluator {
         Ok(Evaluator::bool_to_expr(equal))
     }
 
-    fn builtin_less(&mut self, args: &[Expr]) -> EvalResult {
-        if args.len() != 2 {
-            return Err(EvalError::message("< requires exactly 2 arguments"));
+    fn builtin_not_equal(&mut self, args: &[Expr]) -> EvalResult {
+        let numbers = Self::collect_numeric_args(args, "/=", 2)?;
+
+        for (idx, current) in numbers.iter().enumerate() {
+            if numbers[..idx].iter().any(|prev| prev == current) {
+                return Ok(Evaluator::bool_to_expr(false));
+            }
         }
 
-        let a = Self::to_number(&args[0])
-            .map_err(|_| EvalError::message("< requires numeric arguments"))?;
-        let b = Self::to_number(&args[1])
-            .map_err(|_| EvalError::message("< requires numeric arguments"))?;
+        Ok(Evaluator::bool_to_expr(true))
+    }
 
-        Ok(Evaluator::bool_to_expr(a < b))
+    fn builtin_less(&mut self, args: &[Expr]) -> EvalResult {
+        let numbers = Self::collect_numeric_args(args, "<", 2)?;
+
+        for window in numbers.windows(2) {
+            if !(window[0] < window[1]) {
+                return Ok(Evaluator::bool_to_expr(false));
+            }
+        }
+
+        Ok(Evaluator::bool_to_expr(true))
+    }
+
+    fn builtin_less_equal(&mut self, args: &[Expr]) -> EvalResult {
+        let numbers = Self::collect_numeric_args(args, "<=", 2)?;
+
+        for window in numbers.windows(2) {
+            if !(window[0] <= window[1]) {
+                return Ok(Evaluator::bool_to_expr(false));
+            }
+        }
+
+        Ok(Evaluator::bool_to_expr(true))
     }
 
     fn builtin_greater(&mut self, args: &[Expr]) -> EvalResult {
-        if args.len() != 2 {
-            return Err(EvalError::message("> requires exactly 2 arguments"));
+        let numbers = Self::collect_numeric_args(args, ">", 2)?;
+
+        for window in numbers.windows(2) {
+            if !(window[0] > window[1]) {
+                return Ok(Evaluator::bool_to_expr(false));
+            }
         }
 
-        let a = Self::to_number(&args[0])
-            .map_err(|_| EvalError::message("> requires numeric arguments"))?;
-        let b = Self::to_number(&args[1])
-            .map_err(|_| EvalError::message("> requires numeric arguments"))?;
+        Ok(Evaluator::bool_to_expr(true))
+    }
 
-        Ok(Evaluator::bool_to_expr(a > b))
+    fn builtin_greater_equal(&mut self, args: &[Expr]) -> EvalResult {
+        let numbers = Self::collect_numeric_args(args, ">=", 2)?;
+
+        for window in numbers.windows(2) {
+            if !(window[0] >= window[1]) {
+                return Ok(Evaluator::bool_to_expr(false));
+            }
+        }
+
+        Ok(Evaluator::bool_to_expr(true))
+    }
+
+    fn collect_numeric_args(
+        args: &[Expr],
+        name: &str,
+        min_len: usize,
+    ) -> Result<Vec<f64>, EvalError> {
+        if args.len() < min_len {
+            return Err(EvalError::message(format!(
+                "{} requires at least {} arguments",
+                name, min_len
+            )));
+        }
+
+        let mut numbers = Vec::with_capacity(args.len());
+        for arg in args {
+            let value = Self::to_number(arg)
+                .map_err(|_| EvalError::message(format!("{} requires numeric arguments", name)))?;
+            numbers.push(value);
+        }
+
+        Ok(numbers)
     }
 
     // Vector operations
