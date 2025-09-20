@@ -269,6 +269,28 @@ impl Evaluator {
         Evaluator { environment: env }
     }
 
+    pub fn parse(input: &str) -> Result<Expr, String> {
+        let mut tokenizer = Tokenizer::new(input);
+        let tokens = tokenizer.tokenize()?;
+
+        if tokens.is_empty() {
+            return Ok(Expr::List(vec![]));
+        }
+
+        let mut parser = Parser::new(tokens);
+        parser.parse()
+    }
+
+    pub fn eval_str(&mut self, input: &str) -> Result<Expr, String> {
+        let expr = Self::parse(input)?;
+        self.eval(&expr)
+    }
+
+    pub fn eval_once(input: &str) -> Result<Expr, String> {
+        let mut evaluator = Self::new();
+        evaluator.eval_str(input)
+    }
+
     pub fn eval(&mut self, expr: &Expr) -> Result<Expr, String> {
         match expr {
             Expr::Number(_) | Expr::String(_) => Ok(expr.clone()),
@@ -635,16 +657,7 @@ impl Repl {
     }
 
     pub fn evaluate(&mut self, input: &str) -> Result<Expr, String> {
-        let mut tokenizer = Tokenizer::new(input);
-        let tokens = tokenizer.tokenize()?;
-
-        if tokens.is_empty() {
-            return Ok(Expr::List(vec![]));
-        }
-
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse()?;
-        self.evaluator.eval(&expr)
+        self.evaluator.eval_str(input)
     }
 
     pub fn format_expr(&self, expr: &Expr) -> String {

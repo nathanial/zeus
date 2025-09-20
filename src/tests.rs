@@ -2,31 +2,22 @@
 mod tests {
     use crate::interpreter::*;
 
-    fn eval_expr(input: &str) -> Result<Expr, String> {
-        let mut tokenizer = Tokenizer::new(input);
-        let tokens = tokenizer.tokenize()?;
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse()?;
-        let mut evaluator = Evaluator::new();
-        evaluator.eval(&expr)
-    }
-
     fn eval_to_number(input: &str) -> f64 {
-        match eval_expr(input).unwrap() {
+        match Evaluator::eval_once(input).unwrap() {
             Expr::Number(n) => n,
             other => panic!("Expected number, got {:?}", other),
         }
     }
 
     fn eval_to_string(input: &str) -> String {
-        match eval_expr(input).unwrap() {
+        match Evaluator::eval_once(input).unwrap() {
             Expr::String(s) => s,
             other => panic!("Expected string, got {:?}", other),
         }
     }
 
     fn eval_to_list(input: &str) -> Vec<Expr> {
-        match eval_expr(input).unwrap() {
+        match Evaluator::eval_once(input).unwrap() {
             Expr::List(l) => l,
             other => panic!("Expected list, got {:?}", other),
         }
@@ -198,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_eval_division_by_zero() {
-        let result = eval_expr("(/ 10 0)");
+        let result = Evaluator::eval_once("(/ 10 0)");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Division by zero"));
     }
@@ -223,24 +214,8 @@ mod tests {
     #[test]
     fn test_eval_define_and_use() {
         let mut evaluator = Evaluator::new();
-
-        let define_expr = {
-            let mut tokenizer = Tokenizer::new("(define x 10)");
-            let tokens = tokenizer.tokenize().unwrap();
-            let mut parser = Parser::new(tokens);
-            parser.parse().unwrap()
-        };
-
-        let use_expr = {
-            let mut tokenizer = Tokenizer::new("(+ x 5)");
-            let tokens = tokenizer.tokenize().unwrap();
-            let mut parser = Parser::new(tokens);
-            parser.parse().unwrap()
-        };
-
-        evaluator.eval(&define_expr).unwrap();
-        let result = evaluator.eval(&use_expr).unwrap();
-
+        evaluator.eval_str("(define x 10)").unwrap();
+        let result = evaluator.eval_str("(+ x 5)").unwrap();
         assert_eq!(result, Expr::Number(15.0));
     }
 
@@ -258,14 +233,14 @@ mod tests {
 
     #[test]
     fn test_eval_quote() {
-        let result = eval_expr("(quote (+ 1 2))").unwrap();
+        let result = Evaluator::eval_once("(quote (+ 1 2))").unwrap();
         assert_eq!(result, Expr::List(vec![
             Expr::Symbol("+".to_string()),
             Expr::Number(1.0),
             Expr::Number(2.0),
         ]));
 
-        let result = eval_expr("(quote x)").unwrap();
+        let result = Evaluator::eval_once("(quote x)").unwrap();
         assert_eq!(result, Expr::Symbol("x".to_string()));
     }
 
@@ -286,7 +261,7 @@ mod tests {
     fn test_eval_car() {
         assert_eq!(eval_to_number("(car (list 1 2 3))"), 1.0);
 
-        let result = eval_expr("(car (list))");
+        let result = Evaluator::eval_once("(car (list))");
         assert!(result.is_err());
     }
 
@@ -321,87 +296,25 @@ mod tests {
     #[test]
     fn test_eval_lambda_simple() {
         let mut evaluator = Evaluator::new();
-
-        // Define a square function
-        let define_expr = {
-            let mut tokenizer = Tokenizer::new("(define square (lambda (n) (* n n)))");
-            let tokens = tokenizer.tokenize().unwrap();
-            let mut parser = Parser::new(tokens);
-            parser.parse().unwrap()
-        };
-
-        // Use the square function
-        let use_expr = {
-            let mut tokenizer = Tokenizer::new("(square 5)");
-            let tokens = tokenizer.tokenize().unwrap();
-            let mut parser = Parser::new(tokens);
-            parser.parse().unwrap()
-        };
-
-        evaluator.eval(&define_expr).unwrap();
-        let result = evaluator.eval(&use_expr).unwrap();
-
+        evaluator.eval_str("(define square (lambda (n) (* n n)))").unwrap();
+        let result = evaluator.eval_str("(square 5)").unwrap();
         assert_eq!(result, Expr::Number(25.0));
     }
 
     #[test]
     fn test_eval_lambda_multiple_params() {
         let mut evaluator = Evaluator::new();
-
-        // Define an add function
-        let define_expr = {
-            let mut tokenizer = Tokenizer::new("(define add (lambda (x y) (+ x y)))");
-            let tokens = tokenizer.tokenize().unwrap();
-            let mut parser = Parser::new(tokens);
-            parser.parse().unwrap()
-        };
-
-        // Use the add function
-        let use_expr = {
-            let mut tokenizer = Tokenizer::new("(add 3 7)");
-            let tokens = tokenizer.tokenize().unwrap();
-            let mut parser = Parser::new(tokens);
-            parser.parse().unwrap()
-        };
-
-        evaluator.eval(&define_expr).unwrap();
-        let result = evaluator.eval(&use_expr).unwrap();
-
+        evaluator.eval_str("(define add (lambda (x y) (+ x y)))").unwrap();
+        let result = evaluator.eval_str("(add 3 7)").unwrap();
         assert_eq!(result, Expr::Number(10.0));
     }
 
     #[test]
     fn test_eval_lambda_closure() {
         let mut evaluator = Evaluator::new();
-
-        // Define x in outer scope
-        let define_x = {
-            let mut tokenizer = Tokenizer::new("(define x 10)");
-            let tokens = tokenizer.tokenize().unwrap();
-            let mut parser = Parser::new(tokens);
-            parser.parse().unwrap()
-        };
-
-        // Define function that uses x
-        let define_func = {
-            let mut tokenizer = Tokenizer::new("(define add-x (lambda (y) (+ x y)))");
-            let tokens = tokenizer.tokenize().unwrap();
-            let mut parser = Parser::new(tokens);
-            parser.parse().unwrap()
-        };
-
-        // Use the function
-        let use_expr = {
-            let mut tokenizer = Tokenizer::new("(add-x 5)");
-            let tokens = tokenizer.tokenize().unwrap();
-            let mut parser = Parser::new(tokens);
-            parser.parse().unwrap()
-        };
-
-        evaluator.eval(&define_x).unwrap();
-        evaluator.eval(&define_func).unwrap();
-        let result = evaluator.eval(&use_expr).unwrap();
-
+        evaluator.eval_str("(define x 10)").unwrap();
+        evaluator.eval_str("(define add-x (lambda (y) (+ x y)))").unwrap();
+        let result = evaluator.eval_str("(add-x 5)").unwrap();
         assert_eq!(result, Expr::Number(15.0));
     }
 
@@ -413,24 +326,24 @@ mod tests {
 
     #[test]
     fn test_error_undefined_variable() {
-        let result = eval_expr("undefined_var");
+        let result = Evaluator::eval_once("undefined_var");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Undefined variable"));
     }
 
     #[test]
     fn test_error_invalid_application() {
-        let result = eval_expr("(123 456)");
+        let result = Evaluator::eval_once("(123 456)");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Cannot apply"));
     }
 
     #[test]
     fn test_error_wrong_arg_count() {
-        let result = eval_expr("(+ 1)"); // This should work
+        let result = Evaluator::eval_once("(+ 1)"); // This should work
         assert!(result.is_ok());
 
-        let result = eval_expr("(= 1)"); // = requires exactly 2 args
+        let result = Evaluator::eval_once("(= 1)"); // = requires exactly 2 args
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("requires exactly 2 arguments"));
     }
@@ -444,26 +357,8 @@ mod tests {
     #[test]
     fn test_complex_expression() {
         let mut evaluator = Evaluator::new();
-
-        // Define factorial function (non-recursive version for simplicity)
-        let expr1 = {
-            let mut tokenizer = Tokenizer::new("(define fact3 (lambda (n) (* n 2 1)))");
-            let tokens = tokenizer.tokenize().unwrap();
-            let mut parser = Parser::new(tokens);
-            parser.parse().unwrap()
-        };
-
-        // Use in complex expression
-        let expr2 = {
-            let mut tokenizer = Tokenizer::new("(+ (fact3 3) (- 10 4))");
-            let tokens = tokenizer.tokenize().unwrap();
-            let mut parser = Parser::new(tokens);
-            parser.parse().unwrap()
-        };
-
-        evaluator.eval(&expr1).unwrap();
-        let result = evaluator.eval(&expr2).unwrap();
-
+        evaluator.eval_str("(define fact3 (lambda (n) (* n 2 1)))").unwrap();
+        let result = evaluator.eval_str("(+ (fact3 3) (- 10 4))").unwrap();
         assert_eq!(result, Expr::Number(12.0)); // 6 + 6
     }
 
