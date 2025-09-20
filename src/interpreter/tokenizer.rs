@@ -31,13 +31,26 @@ impl Tokenizer {
         }
     }
 
-    fn skip_whitespace(&mut self) {
-        while let Some(ch) = self.peek() {
-            if ch.is_whitespace() {
-                self.advance();
-            } else {
-                break;
+    fn skip_ignorable(&mut self) {
+        loop {
+            while let Some(ch) = self.peek() {
+                if ch.is_whitespace() {
+                    self.advance();
+                } else {
+                    break;
+                }
             }
+
+            if self.peek() == Some(';') {
+                while let Some(ch) = self.advance() {
+                    if ch == '\n' {
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            break;
         }
     }
 
@@ -194,7 +207,7 @@ impl Tokenizer {
     }
 
     fn next_token(&mut self) -> Result<Option<Token>, String> {
-        self.skip_whitespace();
+        self.skip_ignorable();
 
         match self.peek() {
             None => Ok(None),

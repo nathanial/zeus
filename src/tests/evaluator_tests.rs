@@ -89,7 +89,7 @@ fn test_complex_expression() {
 fn test_eval_multiple_expressions() {
     let mut evaluator = Evaluator::new();
     let result = evaluator
-        .eval_str("(define x 5)\n(define y 7)\n(+ x y)")
+        .eval_str("(define x 5)\n; comment about x\n(define y 7) ; inline comment\n(+ x y)")
         .unwrap();
     assert_eq!(result, Expr::Integer(12));
 
