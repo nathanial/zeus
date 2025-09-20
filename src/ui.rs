@@ -2,17 +2,17 @@ use raylib::prelude::*;
 use crate::interpreter::evaluator::Evaluator;
 use std::collections::VecDeque;
 
-const WINDOW_WIDTH: i32 = 800;
-const WINDOW_HEIGHT: i32 = 600;
-const FONT_SIZE: i32 = 16;
-const LINE_HEIGHT: i32 = 20;
-const PADDING: i32 = 10;
+const WINDOW_WIDTH: i32 = 900;
+const WINDOW_HEIGHT: i32 = 650;
+const FONT_SIZE: i32 = 18;
+const LINE_HEIGHT: i32 = 22;
+const PADDING: i32 = 15;
 const MAX_HISTORY: usize = 100;
 const INPUT_COLOR: Color = Color::WHITE;
-const OUTPUT_COLOR: Color = Color::GREEN;
-const ERROR_COLOR: Color = Color::RED;
-const BACKGROUND_COLOR: Color = Color::new(20, 20, 30, 255);
-const INPUT_BOX_COLOR: Color = Color::new(30, 30, 40, 255);
+const OUTPUT_COLOR: Color = Color::new(100, 255, 100, 255);
+const ERROR_COLOR: Color = Color::new(255, 100, 100, 255);
+const BACKGROUND_COLOR: Color = Color::new(25, 25, 35, 255);
+const INPUT_BOX_COLOR: Color = Color::new(35, 35, 45, 255);
 
 struct ReplLine {
     text: String,
@@ -24,6 +24,7 @@ pub fn run_ui() {
     let (mut rl, thread) = raylib::init()
         .size(WINDOW_WIDTH, WINDOW_HEIGHT)
         .title("Zeus LISP - Graphical REPL")
+        .resizable()
         .build();
 
     let mut evaluator = Evaluator::new();
@@ -54,6 +55,9 @@ pub fn run_ui() {
         is_input: false,
         is_error: false,
     });
+
+    // Just use the default font with a larger size - it's clean and works well
+    rl.set_target_fps(60);
 
     while !rl.window_should_close() {
         // Handle keyboard input
@@ -116,8 +120,14 @@ pub fn run_ui() {
         // Handle scrolling
         let wheel_move = rl.get_mouse_wheel_move();
         if wheel_move != 0.0 {
-            scroll_offset += (wheel_move * 3.0) as i32;
+            scroll_offset -= (wheel_move * 3.0) as i32;
             scroll_offset = scroll_offset.max(0);
+
+            // Calculate max scroll
+            let total_lines = history.len() as i32;
+            let visible_lines = (WINDOW_HEIGHT - 145) / LINE_HEIGHT;
+            let max_scroll = ((total_lines - visible_lines) * LINE_HEIGHT).max(0);
+            scroll_offset = scroll_offset.min(max_scroll);
         }
 
         // Update cursor blink
@@ -132,43 +142,52 @@ pub fn run_ui() {
         d.clear_background(BACKGROUND_COLOR);
 
         // Draw title bar
-        d.draw_rectangle(0, 0, WINDOW_WIDTH, 30, Color::new(30, 30, 50, 255));
-        d.draw_text("Zeus LISP - Graphical REPL", 10, 5, 20, Color::WHITE);
+        d.draw_rectangle(0, 0, d.get_screen_width(), 35, Color::new(35, 35, 55, 255));
+        d.draw_text("Zeus LISP - Graphical REPL", 15, 8, 20, Color::WHITE);
 
         // Draw history area
-        let history_height = WINDOW_HEIGHT - 100;
-        let mut y = 40 - scroll_offset;
+        let screen_width = d.get_screen_width();
+        let screen_height = d.get_screen_height();
+        let history_height = screen_height - 100;
+        let mut y = 45 - scroll_offset;
 
-        for line in history.iter() {
-            if y >= 40 && y < history_height {
-                let color = if line.is_error {
-                    ERROR_COLOR
-                } else if line.is_input {
-                    INPUT_COLOR
-                } else {
-                    OUTPUT_COLOR
-                };
+        // Set scissor mode to clip text that goes outside the history area
+        {
+            let mut scissor = d.begin_scissor_mode(0, 35, screen_width, history_height - 35);
 
-                d.draw_text(&line.text, PADDING, y, FONT_SIZE, color);
+            for line in history.iter() {
+                if y + LINE_HEIGHT >= 35 && y < history_height {
+                    let color = if line.is_error {
+                        ERROR_COLOR
+                    } else if line.is_input {
+                        INPUT_COLOR
+                    } else {
+                        OUTPUT_COLOR
+                    };
+
+                    scissor.draw_text(&line.text, PADDING, y, FONT_SIZE, color);
+                }
+                y += LINE_HEIGHT;
             }
-            y += LINE_HEIGHT;
         }
 
         // Draw input box
-        let input_y = WINDOW_HEIGHT - 60;
-        d.draw_rectangle(0, input_y - 10, WINDOW_WIDTH, 70, INPUT_BOX_COLOR);
+        let input_y = screen_height - 65;
+        d.draw_rectangle(0, input_y - 10, screen_width, 75, INPUT_BOX_COLOR);
         d.draw_text("Input:", PADDING, input_y, FONT_SIZE, Color::GRAY);
-        d.draw_text(&format!("> {}", current_input), PADDING, input_y + 20, FONT_SIZE, INPUT_COLOR);
+
+        let prompt = format!("> {}", current_input);
+        d.draw_text(&prompt, PADDING, input_y + 22, FONT_SIZE, INPUT_COLOR);
 
         // Draw cursor
         if cursor_visible {
-            let cursor_x = PADDING + d.measure_text(&format!("> {}", current_input), FONT_SIZE);
-            d.draw_rectangle(cursor_x, input_y + 20, 2, FONT_SIZE, INPUT_COLOR);
+            let cursor_x = PADDING + d.measure_text(&prompt, FONT_SIZE);
+            d.draw_rectangle(cursor_x, input_y + 22, 2, FONT_SIZE, INPUT_COLOR);
         }
 
         // Draw help text at bottom
         d.draw_text("ESC: Exit | Enter: Evaluate | Mouse Wheel: Scroll",
-                   PADDING, WINDOW_HEIGHT - 20, 12, Color::GRAY);
+                   PADDING, screen_height - 20, 14, Color::GRAY);
     }
 }
 
