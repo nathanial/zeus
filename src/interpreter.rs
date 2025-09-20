@@ -307,6 +307,11 @@ impl Evaluator {
                         "if" => self.eval_if(list),
                         "quote" => self.eval_quote(list),
                         "lambda" => self.eval_lambda(list),
+                        "let" => self.eval_let(list),
+                        "let*" => self.eval_let_star(list),
+                        "cond" => self.eval_cond(list),
+                        "and" => self.eval_and(list),
+                        "or" => self.eval_or(list),
                         _ => self.eval_application(list),
                     },
                     _ => self.eval_application(list),
@@ -361,6 +366,208 @@ impl Evaluator {
         }
 
         Ok(Expr::List(list.to_vec()))
+    }
+
+    fn eval_let(&mut self, list: &[Expr]) -> Result<Expr, String> {
+        if list.len() < 3 {
+            return Err("let requires at least 2 arguments".to_string());
+        }
+
+        let bindings = match &list[1] {
+            Expr::List(bindings) => bindings,
+            _ => return Err("let bindings must be a list".to_string()),
+        };
+
+        self.environment.push_scope();
+
+        // Process all bindings in parallel (standard let behavior)
+        let mut binding_values = Vec::new();
+        for binding in bindings {
+            match binding {
+                Expr::List(pair) if pair.len() == 2 => {
+                    if let Expr::Symbol(_) = &pair[0] {
+                        let value = self.eval(&pair[1])?;
+                        binding_values.push((pair[0].clone(), value));
+                    } else {
+                        self.environment.pop_scope();
+                        return Err("let binding must start with a symbol".to_string());
+                    }
+                }
+                _ => {
+                    self.environment.pop_scope();
+                    return Err("let binding must be a list of two elements".to_string());
+                }
+            }
+        }
+
+        // Now set all the bindings
+        for (symbol, value) in binding_values {
+            if let Expr::Symbol(name) = symbol {
+                self.environment.set(name, value);
+            }
+        }
+
+        // Evaluate body expressions
+        let mut result = Ok(Expr::List(vec![]));
+        for body_expr in &list[2..] {
+            result = self.eval(body_expr);
+            if result.is_err() {
+                break;
+            }
+        }
+
+        self.environment.pop_scope();
+        result
+    }
+
+    fn eval_let_star(&mut self, list: &[Expr]) -> Result<Expr, String> {
+        if list.len() < 3 {
+            return Err("let* requires at least 2 arguments".to_string());
+        }
+
+        let bindings = match &list[1] {
+            Expr::List(bindings) => bindings,
+            _ => return Err("let* bindings must be a list".to_string()),
+        };
+
+        self.environment.push_scope();
+
+        // Process bindings sequentially (let* behavior)
+        for binding in bindings {
+            match binding {
+                Expr::List(pair) if pair.len() == 2 => {
+                    if let Expr::Symbol(name) = &pair[0] {
+                        let value = self.eval(&pair[1])?;
+                        self.environment.set(name.clone(), value);
+                    } else {
+                        self.environment.pop_scope();
+                        return Err("let* binding must start with a symbol".to_string());
+                    }
+                }
+                _ => {
+                    self.environment.pop_scope();
+                    return Err("let* binding must be a list of two elements".to_string());
+                }
+            }
+        }
+
+        // Evaluate body expressions
+        let mut result = Ok(Expr::List(vec![]));
+        for body_expr in &list[2..] {
+            result = self.eval(body_expr);
+            if result.is_err() {
+                break;
+            }
+        }
+
+        self.environment.pop_scope();
+        result
+    }
+
+    fn eval_cond(&mut self, list: &[Expr]) -> Result<Expr, String> {
+        if list.len() < 2 {
+            return Err("cond requires at least 1 clause".to_string());
+        }
+
+        for clause in &list[1..] {
+            match clause {
+                Expr::List(clause_list) if !clause_list.is_empty() => {
+                    let condition = &clause_list[0];
+
+                    // Check for else clause
+                    let is_else = match condition {
+                        Expr::Symbol(s) if s == "else" => true,
+                        _ => false,
+                    };
+
+                    if is_else {
+                        // Execute else branch
+                        if clause_list.len() < 2 {
+                            return Ok(Expr::Number(1.0)); // else with no body returns true
+                        }
+                        let mut result = Ok(Expr::List(vec![]));
+                        for expr in &clause_list[1..] {
+                            result = self.eval(expr);
+                            if result.is_err() {
+                                return result;
+                            }
+                        }
+                        return result;
+                    }
+
+                    // Evaluate condition
+                    let cond_result = self.eval(condition)?;
+                    let is_true = match cond_result {
+                        Expr::Number(n) => n != 0.0,
+                        Expr::List(ref l) => !l.is_empty(),
+                        Expr::String(ref s) => !s.is_empty(),
+                        _ => true,
+                    };
+
+                    if is_true {
+                        if clause_list.len() == 1 {
+                            return Ok(cond_result); // Return condition value if no body
+                        }
+                        // Execute this branch
+                        let mut result = Ok(Expr::List(vec![]));
+                        for expr in &clause_list[1..] {
+                            result = self.eval(expr);
+                            if result.is_err() {
+                                return result;
+                            }
+                        }
+                        return result;
+                    }
+                }
+                _ => return Err("cond clause must be a non-empty list".to_string()),
+            }
+        }
+
+        // No condition was true
+        Ok(Expr::List(vec![]))
+    }
+
+    fn eval_and(&mut self, list: &[Expr]) -> Result<Expr, String> {
+        if list.len() == 1 {
+            return Ok(Expr::Number(1.0)); // (and) with no args returns true
+        }
+
+        let mut result = Expr::Number(1.0);
+        for expr in &list[1..] {
+            result = self.eval(expr)?;
+            let is_false = match &result {
+                Expr::Number(n) => *n == 0.0,
+                Expr::List(l) => l.is_empty(),
+                _ => false,
+            };
+
+            if is_false {
+                return Ok(Expr::Number(0.0));
+            }
+        }
+
+        Ok(result) // Return last value if all are truthy
+    }
+
+    fn eval_or(&mut self, list: &[Expr]) -> Result<Expr, String> {
+        if list.len() == 1 {
+            return Ok(Expr::Number(0.0)); // (or) with no args returns false
+        }
+
+        for expr in &list[1..] {
+            let result = self.eval(expr)?;
+            let is_true = match &result {
+                Expr::Number(n) => *n != 0.0,
+                Expr::List(l) => !l.is_empty(),
+                _ => true,
+            };
+
+            if is_true {
+                return Ok(result); // Return first truthy value
+            }
+        }
+
+        Ok(Expr::Number(0.0)) // All were falsy
     }
 
     fn eval_application(&mut self, list: &[Expr]) -> Result<Expr, String> {
@@ -530,6 +737,60 @@ impl Evaluator {
                     Ok(Expr::List(vec![args[0].clone(), args[1].clone()]))
                 }
             }
+            "append" => {
+                let mut result = Vec::new();
+                for arg in args {
+                    match arg {
+                        Expr::List(list) => result.extend_from_slice(list),
+                        _ => return Err("append requires list arguments".to_string()),
+                    }
+                }
+                Ok(Expr::List(result))
+            }
+            "reverse" => {
+                if args.len() != 1 {
+                    return Err("reverse requires exactly 1 argument".to_string());
+                }
+
+                match &args[0] {
+                    Expr::List(list) => {
+                        let mut reversed = list.clone();
+                        reversed.reverse();
+                        Ok(Expr::List(reversed))
+                    }
+                    _ => Err("reverse requires a list argument".to_string()),
+                }
+            }
+            "length" => {
+                if args.len() != 1 {
+                    return Err("length requires exactly 1 argument".to_string());
+                }
+
+                match &args[0] {
+                    Expr::List(list) => Ok(Expr::Number(list.len() as f64)),
+                    Expr::String(s) => Ok(Expr::Number(s.len() as f64)),
+                    _ => Err("length requires a list or string argument".to_string()),
+                }
+            }
+            "nth" => {
+                if args.len() != 2 {
+                    return Err("nth requires exactly 2 arguments".to_string());
+                }
+
+                let index = match &args[0] {
+                    Expr::Number(n) if *n >= 0.0 && n.fract() == 0.0 => *n as usize,
+                    _ => return Err("nth index must be a non-negative integer".to_string()),
+                };
+
+                match &args[1] {
+                    Expr::List(list) => {
+                        list.get(index)
+                            .cloned()
+                            .ok_or_else(|| "nth index out of bounds".to_string())
+                    }
+                    _ => Err("nth requires a list as second argument".to_string()),
+                }
+            }
             _ => Err(format!("Unknown function: {}", name)),
         }
     }
@@ -576,7 +837,11 @@ impl Environment {
     }
 
     pub fn define_builtins(&mut self) {
-        let builtins = vec!["+", "-", "*", "/", "=", "<", ">", "list", "car", "cdr", "cons"];
+        let builtins = vec![
+            "+", "-", "*", "/", "=", "<", ">",
+            "list", "car", "cdr", "cons",
+            "append", "reverse", "length", "nth"
+        ];
         for builtin in builtins {
             self.set(builtin.to_string(), Expr::Symbol(builtin.to_string()));
         }

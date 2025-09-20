@@ -5,11 +5,11 @@ This document outlines the features that Zeus currently lacks compared to a full
 ## Core Language Features
 
 ### Special Forms & Control Flow
-- [ ] `let` and `let*` - Local variable bindings
+- [x] `let` and `let*` - Local variable bindings ✅
 - [ ] `letrec` - Recursive local bindings
-- [ ] `cond` - Multi-branch conditional
+- [x] `cond` - Multi-branch conditional ✅
 - [ ] `case` - Value-based branching
-- [ ] `and` / `or` - Logical operators with short-circuit evaluation
+- [x] `and` / `or` - Logical operators with short-circuit evaluation ✅
 - [ ] `when` / `unless` - Single-branch conditionals
 - [ ] `progn` / `begin` - Sequential evaluation
 - [ ] `do` / `loop` - Iteration constructs
@@ -37,10 +37,11 @@ This document outlines the features that Zeus currently lacks compared to a full
 - [ ] **Streams** - I/O abstraction
 
 ### List Operations
-- [ ] `append` - List concatenation
-- [ ] `reverse` - List reversal
-- [ ] `length` - List/sequence length
-- [ ] `nth` / `nthcdr` - N-th element access
+- [x] `append` - List concatenation ✅
+- [x] `reverse` - List reversal ✅
+- [x] `length` - List/sequence length ✅
+- [x] `nth` - N-th element access ✅
+- [ ] `nthcdr` - N-th cdr access
 - [ ] `member` / `assoc` - List searching
 - [ ] `mapcar` / `maplist` - List mapping
 - [ ] `reduce` - List reduction
